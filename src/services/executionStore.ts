@@ -7,6 +7,7 @@ import { create } from "zustand";
 import type { Locale, ServiceDomain } from "../types";
 
 export interface SpeechContent {
+  id?: string;
   text: string;
   textMalayalam: string;
 }
@@ -17,14 +18,21 @@ export interface PendingClarification {
   questionMalayalam: string;
 }
 
+export interface Scheme {
+  title: string;
+  url: string;
+  snippet: string;
+  source_query: string;
+}
+
 export interface ExecutionEvent {
   type:
-    | "step_started"
-    | "step_completed"
-    | "step_failed"
-    | "clarify"
-    | "task_completed"
-    | "task_failed";
+  | "step_started"
+  | "step_completed"
+  | "step_failed"
+  | "clarify"
+  | "task_completed"
+  | "task_failed";
   message: string;
   messageMalayalam: string;
   timestamp: number;
@@ -74,6 +82,15 @@ const initialState: ExecutionState = {
   locale: "en-IN",
 };
 
+const GOVERNMENT_REQUIRED_FIELDS = [
+  "age",
+  "gender",
+  "state",
+  "income_bracket",
+  "occupation",
+  "category",
+];
+
 export const useExecutionStore = create<ExecutionStore>((set, get) => ({
   ...initialState,
 
@@ -99,41 +116,12 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
       events: [...state.events, startEvent],
     }));
 
-    // Simulate processing and ask for clarification if needed
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    // Check if we need more information
-    const needsClarification = Object.keys(entities).length === 0;
-
-    if (needsClarification) {
-      const clarificationQuestions = getClarificationQuestion(domain, intent);
-      set({
-        status: "waiting_input",
-        pendingClarification: clarificationQuestions,
-        currentSpeech: {
-          text: clarificationQuestions.question,
-          textMalayalam: clarificationQuestions.questionMalayalam,
-        },
-      });
-
-      const clarifyEvent: ExecutionEvent = {
-        type: "clarify",
-        message: clarificationQuestions.question,
-        messageMalayalam: clarificationQuestions.questionMalayalam,
-        timestamp: Date.now(),
-      };
-
-      set((state) => ({
-        events: [...state.events, clarifyEvent],
-      }));
-    } else {
-      // Complete the task
-      await completeTask(get, set, domain, intent, entities);
-    }
+    // Start processing
+    await processTaskLogic(get, set, domain, intent, entities);
   },
 
   provideAnswer: async (field, answer) => {
-    const { currentDomain, currentIntent, entities, locale } = get();
+    const { currentDomain, currentIntent, entities } = get();
 
     if (!currentDomain || !currentIntent) return;
 
@@ -146,8 +134,8 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
       pendingClarification: null,
     });
 
-    // Process with the new information
-    await completeTask(get, set, currentDomain, currentIntent, updatedEntities);
+    // Continue processing with new info
+    await processTaskLogic(get, set, currentDomain, currentIntent, updatedEntities);
   },
 
   cancelTask: () => {
@@ -173,7 +161,163 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
   },
 }));
 
-// Helper function to get clarification questions
+// Core logic for processing tasks
+async function processTaskLogic(
+  get: () => ExecutionStore,
+  set: (state: Partial<ExecutionState>) => void,
+  domain: ServiceDomain,
+  intent: string,
+  entities: Record<string, unknown>
+) {
+  // Simulate thinking delay
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  // Special handling for Government Scheme Search
+  if (domain === "government" && intent === "find_schemes") {
+    const missingField = GOVERNMENT_REQUIRED_FIELDS.find(f => !entities[f]);
+
+    if (missingField) {
+      const question = getGovernmentQuestion(missingField);
+
+      set({
+        status: "waiting_input",
+        pendingClarification: question,
+        currentSpeech: {
+          id: `speech-${Date.now()}`,
+          text: question.question,
+          textMalayalam: question.questionMalayalam
+        }
+      });
+
+      const clarifyEvent: ExecutionEvent = {
+        type: "clarify",
+        message: question.question,
+        messageMalayalam: question.questionMalayalam,
+        timestamp: Date.now()
+      };
+
+      set({ events: [...get().events, clarifyEvent] });
+      return;
+    }
+
+    // All fields collected, call API
+    try {
+      const response = await fetch("http://127.0.0.1:8000/find-schemes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(entities)
+      });
+
+      if (!response.ok) throw new Error("Failed to fetch schemes");
+
+      const data = await response.json();
+
+      const count = data.count || 0;
+      const schemes = data.schemes || [];
+
+      const message = `I found ${count} schemes for you in ${entities.state}.`;
+      const messageMl = `${entities.state}-ൽ നിങ്ങൾക്കായി ${count} പദ്ധതികൾ കണ്ടെത്തി.`;
+
+      const completedEvent: ExecutionEvent = {
+        type: "task_completed",
+        message,
+        messageMalayalam: messageMl,
+        timestamp: Date.now(),
+        data: { schemes, ...data }
+      };
+
+      set({
+        status: "completed",
+        currentSpeech: { id: `speech-${Date.now()}`, text: message, textMalayalam: messageMl },
+        events: [...get().events, completedEvent]
+      });
+
+    } catch (error) {
+      console.error(error);
+      const errorEvent: ExecutionEvent = {
+        type: "task_failed",
+        message: "Sorry, I encountered an error finding schemes.",
+        messageMalayalam: "ക്ഷമിക്കണം, പദ്ധതികൾ കണ്ടെത്തുന്നതിൽ ഒരു പിശക് സംഭവിച്ചു.",
+        timestamp: Date.now()
+      };
+
+      set({
+        status: "failed",
+        currentSpeech: { text: "Sorry, something went wrong.", textMalayalam: "ക്ഷമിക്കണം, എന്തോ കുഴപ്പം സംഭവിച്ചു." },
+        events: [...get().events, errorEvent]
+      });
+    }
+    return;
+  }
+
+  // Default existing logic for other domains
+  const needsClarification = Object.keys(entities).length === 0;
+
+  if (needsClarification) {
+    const clarificationQuestions = getClarificationQuestion(domain, intent);
+    set({
+      status: "waiting_input",
+      pendingClarification: clarificationQuestions,
+      currentSpeech: {
+        id: `speech-${Date.now()}`,
+        text: clarificationQuestions.question,
+        textMalayalam: clarificationQuestions.questionMalayalam,
+      },
+    });
+
+    const clarifyEvent: ExecutionEvent = {
+      type: "clarify",
+      message: clarificationQuestions.question,
+      messageMalayalam: clarificationQuestions.questionMalayalam,
+      timestamp: Date.now(),
+    };
+
+    set({
+      events: [...get().events, clarifyEvent],
+    });
+  } else {
+    // Complete the task (Mock)
+    await completeTaskMock(get, set, domain, intent, entities);
+  }
+}
+
+function getGovernmentQuestion(field: string): PendingClarification {
+  const questions: Record<string, PendingClarification> = {
+    age: {
+      field: "age",
+      question: "What is your age?",
+      questionMalayalam: "നിങ്ങളുടെ പ്രായം എത്രയാണ്?"
+    },
+    gender: {
+      field: "gender",
+      question: "What is your gender?",
+      questionMalayalam: "നിങ്ങളുടെ ലിംഗഭേദം എന്താണ്?"
+    },
+    state: {
+      field: "state",
+      question: "Which state are you from?",
+      questionMalayalam: "ഏത് സംസ്ഥാനത്താണ് നിങ്ങൾ താമസിക്കുന്നത്?"
+    },
+    income_bracket: {
+      field: "income_bracket",
+      question: "What is your annual income bracket?",
+      questionMalayalam: "നിങ്ങളുടെ വാർഷിക വരുമാനം എത്രയാണ്?"
+    },
+    occupation: {
+      field: "occupation",
+      question: "What is your occupation?",
+      questionMalayalam: "നിങ്ങളുടെ തൊഴിൽ എന്താണ്?"
+    },
+    category: {
+      field: "category",
+      question: "What is your category? (e.g., General, OBC, SC, ST)",
+      questionMalayalam: "നിങ്ങളുടെ വിഭാഗം ഏതാണ്? (ഉദാഹരണത്തിന് General, OBC, SC, ST)"
+    }
+  };
+  return questions[field] || { field, question: `What is your ${field}?`, questionMalayalam: `${field} എന്താണ്?` };
+}
+
+// Helper function to get clarification questions (Legacy/Other domains)
 function getClarificationQuestion(
   domain: ServiceDomain,
   intent: string,
@@ -243,8 +387,8 @@ function getClarificationQuestion(
   );
 }
 
-// Helper function to complete a task
-async function completeTask(
+// Helper function to complete a task (Mock for non-government)
+async function completeTaskMock(
   get: () => ExecutionStore,
   set: (state: Partial<ExecutionState>) => void,
   domain: ServiceDomain,
@@ -257,14 +401,6 @@ async function completeTask(
   // Generate response based on domain and intent
   const response = generateResponse(domain, intent, entities);
 
-  // Log the details
-  console.log("=== Task Completed ===");
-  console.log("Domain:", domain);
-  console.log("Intent:", intent);
-  console.log("Entities:", entities);
-  console.log("Response:", response);
-  console.log("======================");
-
   const completedEvent: ExecutionEvent = {
     type: "task_completed",
     message: response.en,
@@ -276,6 +412,7 @@ async function completeTask(
   set({
     status: "completed",
     currentSpeech: {
+      id: `speech-${Date.now()}`,
       text: response.en,
       textMalayalam: response.ml,
     },

@@ -14,6 +14,7 @@ import {
   VolumeX,
   Scale,
   Briefcase,
+  Send,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useCallback, useState, useRef } from "react";
@@ -194,6 +195,7 @@ export default function ConversationPage() {
   // Local state
   const [locale] = useState<Locale>("en-IN");
   const [hasGreeted, setHasGreeted] = useState(false);
+  const [textInput, setTextInput] = useState("");
 
   const service = serviceType ? serviceDetails[serviceType] : null;
 
@@ -217,12 +219,22 @@ export default function ConversationPage() {
     }
   }, [service, hasGreeted, isSupported, locale, speak]);
 
+  const lastSpokenId = useRef<string | null>(null);
+
   // Speak when there's new speech content
   useEffect(() => {
-    if (currentSpeech && !isSpeaking && !isListening) {
+    if (
+      currentSpeech &&
+      currentSpeech.id !== lastSpokenId.current &&
+      !isSpeaking &&
+      !isListening
+    ) {
       const text =
         locale === "ml-IN" ? currentSpeech.textMalayalam : currentSpeech.text;
       speak(text, locale);
+      if (currentSpeech.id) {
+        lastSpokenId.current = currentSpeech.id;
+      }
     }
   }, [currentSpeech, locale, speak, isSpeaking, isListening]);
 
@@ -241,6 +253,19 @@ export default function ConversationPage() {
       await startTask(service.domain, intent, entities, locale);
     },
     [service, status, pendingClarification, provideAnswer, startTask, locale],
+  );
+
+  // Handle text submit
+  const handleTextSubmit = useCallback(
+    async (e?: React.FormEvent) => {
+      e?.preventDefault();
+      if (!textInput.trim()) return;
+
+      const input = textInput;
+      setTextInput("");
+      await handleVoiceInput(input);
+    },
+    [textInput, handleVoiceInput],
   );
 
   // Toggle listening
@@ -370,19 +395,45 @@ export default function ConversationPage() {
           {events.map((event, index) => (
             <div
               key={`${event.timestamp}-${index}`}
-              className={`rounded-2xl p-4 border ${
-                event.type === "clarify" || event.type === "step_completed"
-                  ? "bg-[#132238]/60 border-[#2FB7B3]/10"
-                  : event.type === "task_failed" || event.type === "step_failed"
-                    ? "bg-red-500/10 border-red-500/20"
-                    : event.type === "task_completed"
-                      ? "bg-[#A8E6A1]/10 border-[#A8E6A1]/20"
-                      : "bg-[#132238]/40 border-[#2FB7B3]/5"
-              }`}
+              className={`rounded-2xl p-4 border ${event.type === "clarify" || event.type === "step_completed"
+                ? "bg-[#132238]/60 border-[#2FB7B3]/10"
+                : event.type === "task_failed" || event.type === "step_failed"
+                  ? "bg-red-500/10 border-red-500/20"
+                  : event.type === "task_completed"
+                    ? "bg-[#A8E6A1]/10 border-[#A8E6A1]/20"
+                    : "bg-[#132238]/40 border-[#2FB7B3]/5"
+                }`}
             >
               <p className="text-white/90 text-sm">
                 {locale === "ml-IN" ? event.messageMalayalam : event.message}
               </p>
+
+              {/* Render Schemes */}
+              {Array.isArray(event.data?.schemes) && (
+                <div className="mt-4 space-y-3">
+                  {(event.data?.schemes as any[]).map((scheme: any, idx: number) => (
+                    <a
+                      key={idx}
+                      href={scheme.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block p-3 rounded-xl bg-[#0B1624]/50 border border-[#2FB7B3]/20 hover:border-[#2FB7B3]/50 transition-colors group"
+                    >
+                      <h3 className="text-[#6FE3D6] font-semibold text-sm mb-1 group-hover:text-[#2FB7B3] transition-colors">
+                        {scheme.title}
+                      </h3>
+                      <p className="text-white/60 text-xs line-clamp-2 leading-relaxed">
+                        {scheme.snippet}
+                      </p>
+                    </a>
+                  ))}
+                  {!!event.data.disclaimer && (
+                    <p className="text-[10px] text-white/40 mt-3 italic border-t border-white/5 pt-2">
+                      {event.data.disclaimer as string}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           ))}
 
@@ -521,6 +572,33 @@ export default function ConversationPage() {
             <AlertCircle className="w-6 h-6" strokeWidth={1.5} />
           </button>
         )}
+      </div>
+
+      {/* Text Input */}
+      <div className="relative z-10 px-4 pb-2">
+        <form
+          onSubmit={handleTextSubmit}
+          className="max-w-xl mx-auto flex items-center gap-2"
+        >
+          <input
+            type="text"
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
+            placeholder={
+              locale === "ml-IN"
+                ? "അല്ലെങ്കിൽ ഇവിടെ ടൈപ്പ് ചെയ്യുക..."
+                : "Or type here..."
+            }
+            className="flex-1 bg-[#132238]/80 border border-[#2FB7B3]/20 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-[#2FB7B3]/50 transition-colors text-sm"
+          />
+          <button
+            type="submit"
+            disabled={!textInput.trim() || status === "running"}
+            className="p-3 rounded-xl bg-[#2FB7B3]/10 border border-[#2FB7B3]/20 text-[#6FE3D6] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#2FB7B3]/20 transition-colors"
+          >
+            <Send className="w-5 h-5" />
+          </button>
+        </form>
       </div>
 
       {/* Bottom hint */}
