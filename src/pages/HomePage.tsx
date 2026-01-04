@@ -1,15 +1,21 @@
-import { useNavigate } from "react-router-dom";
+﻿import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import {
   Heart,
   ShieldAlert,
   Landmark,
   Mic,
+  MicOff,
   ArrowRight,
   Activity,
   Scale,
   Briefcase,
+  Volume2,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useHomeVoiceAgent } from "../hooks";
 
 interface ServiceButton {
   id: string;
@@ -65,10 +71,92 @@ const services: ServiceButton[] = [
 
 export default function HomePage() {
   const navigate = useNavigate();
+  const [showMicPrompt, setShowMicPrompt] = useState(false);
+
+  // Get API key from environment
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
+
+  // Initialize voice agent
+  const {
+    status,
+    agentMessage,
+    userTranscript,
+    error,
+    isReady,
+    startAgent,
+    stopAgent,
+  } = useHomeVoiceAgent({
+    apiKey,
+    autoStart: false, // We'll start after user interaction
+  });
+
+  // Show mic prompt on load
+  useEffect(() => {
+    const timer = setTimeout(() => setShowMicPrompt(true), 500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Auto-start when ready and user has interacted
+  const handleStartVoice = async () => {
+    if (isReady) {
+      await startAgent();
+    }
+  };
 
   const handleServiceClick = (service: ServiceButton) => {
+    stopAgent();
     navigate(service.route);
   };
+
+  // Determine what to show based on status
+  const getStatusDisplay = () => {
+    switch (status) {
+      case "connecting":
+        return {
+          text: "Connecting...",
+          icon: Loader2,
+          color: "text-[#F2A24B]",
+          spin: true,
+        };
+      case "listening":
+        return {
+          text: "Listening...",
+          icon: Mic,
+          color: "text-[#6FE3D6]",
+          spin: false,
+        };
+      case "processing":
+        return {
+          text: "Processing...",
+          icon: Loader2,
+          color: "text-[#F2A24B]",
+          spin: true,
+        };
+      case "speaking":
+        return {
+          text: "Speaking...",
+          icon: Volume2,
+          color: "text-[#A8E6A1]",
+          spin: false,
+        };
+      case "error":
+        return {
+          text: "Error",
+          icon: AlertCircle,
+          color: "text-red-400",
+          spin: false,
+        };
+      default:
+        return {
+          text: "Ready",
+          icon: Mic,
+          color: "text-[#6FE3D6]/60",
+          spin: false,
+        };
+    }
+  };
+
+  const statusDisplay = getStatusDisplay();
 
   return (
     <div className="min-h-screen bg-[#0B1624] relative overflow-hidden">
@@ -175,11 +263,132 @@ export default function HomePage() {
         </main>
 
         {/* Footer */}
-        <footer className="mt-12 text-center">
-          <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#132238]/50 border border-[#2FB7B3]/15">
-            <Mic className="w-4 h-4 text-[#F2A24B]" />
-            <p className="text-white/45 text-xs md:text-sm">
-              Tap to begin your voice journey
+        <footer className="mt-12 text-center space-y-6">
+          {/* Voice Agent Status & Messages */}
+          {(status !== "idle" || agentMessage || userTranscript) && (
+            <div className="max-w-md mx-auto space-y-3">
+              {/* Agent Message */}
+              {agentMessage && (
+                <div className="bg-[#132238]/80 rounded-2xl p-4 border border-[#2FB7B3]/20 backdrop-blur-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#2FB7B3] to-[#6FE3D6] flex items-center justify-center flex-shrink-0">
+                      <Volume2 className="w-4 h-4 text-[#0B1624]" />
+                    </div>
+                    <p className="text-white/90 text-sm leading-relaxed">
+                      {agentMessage}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* User Transcript */}
+              {userTranscript && (
+                <div className="bg-[#2FB7B3]/10 rounded-2xl p-4 border border-[#2FB7B3]/20 ml-auto max-w-[80%]">
+                  <p className="text-white/90 text-sm">{userTranscript}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Error Display */}
+          {error && (
+            <div className="max-w-md mx-auto bg-red-500/10 rounded-xl p-3 border border-red-500/20">
+              <p className="text-red-400 text-sm">{error}</p>
+            </div>
+          )}
+
+          {/* Voice Input Button */}
+          <div className="flex flex-col items-center gap-4">
+            {/* Status indicator */}
+            {status !== "idle" && (
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#132238]/60 border border-[#2FB7B3]/15">
+                <statusDisplay.icon
+                  className={`w-4 h-4 ${statusDisplay.color} ${statusDisplay.spin ? "animate-spin" : ""}`}
+                />
+                <span className={`text-sm ${statusDisplay.color}`}>
+                  {statusDisplay.text}
+                </span>
+              </div>
+            )}
+
+            {/* Main Mic Button */}
+            <button
+              onClick={status === "idle" ? handleStartVoice : stopAgent}
+              disabled={!isReady && status === "idle"}
+              className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-500 ease-out focus:outline-none focus:ring-4 focus:ring-[#2FB7B3]/30 disabled:opacity-50 disabled:cursor-not-allowed ${
+                status === "listening"
+                  ? "bg-[#F2A24B] shadow-[0_0_40px_rgba(242,162,75,0.4)]"
+                  : status === "speaking"
+                    ? "bg-[#A8E6A1] shadow-[0_0_40px_rgba(168,230,161,0.4)]"
+                    : status !== "idle"
+                      ? "bg-gradient-to-br from-[#F2A24B] to-[#2FB7B3] shadow-[0_0_30px_rgba(47,183,179,0.3)]"
+                      : "bg-gradient-to-br from-[#2FB7B3] via-[#6FE3D6] to-[#A8E6A1] shadow-[0_0_40px_rgba(47,183,179,0.25)]"
+              }`}
+              aria-label={
+                status === "idle"
+                  ? "Start voice assistant"
+                  : "Stop voice assistant"
+              }
+            >
+              {/* Pulse rings for listening state */}
+              {status === "listening" && (
+                <>
+                  <span className="absolute inset-0 rounded-full bg-[#F2A24B] animate-ping opacity-20" />
+                  <span className="absolute inset-[-8px] rounded-full border-2 border-[#F2A24B]/30 animate-pulse" />
+                  <span
+                    className="absolute inset-[-16px] rounded-full border border-[#F2A24B]/20 animate-pulse"
+                    style={{ animationDelay: "0.5s" }}
+                  />
+                </>
+              )}
+
+              {/* Speaking animation */}
+              {status === "speaking" && (
+                <span className="absolute inset-[-8px] rounded-full border-2 border-[#A8E6A1]/40 animate-pulse" />
+              )}
+
+              {/* Icon */}
+              {status === "listening" ? (
+                <MicOff
+                  className="w-8 h-8 text-[#0B1624] relative z-10"
+                  strokeWidth={1.5}
+                />
+              ) : status === "speaking" ? (
+                <Volume2
+                  className="w-8 h-8 text-[#0B1624] relative z-10 animate-pulse"
+                  strokeWidth={1.5}
+                />
+              ) : status === "processing" || status === "connecting" ? (
+                <Loader2
+                  className="w-8 h-8 text-[#0B1624] relative z-10 animate-spin"
+                  strokeWidth={1.5}
+                />
+              ) : (
+                <Mic
+                  className="w-8 h-8 text-[#0B1624] relative z-10"
+                  strokeWidth={1.5}
+                />
+              )}
+            </button>
+
+            {/* Prompt text */}
+            <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#132238]/50 border border-[#2FB7B3]/15">
+              <p className="text-white/45 text-xs md:text-sm">
+                {status === "idle"
+                  ? showMicPrompt
+                    ? "Tap to begin your voice journey"
+                    : "Loading..."
+                  : status === "listening"
+                    ? "Speak now - say healthcare, emergency, legal, government, or employment"
+                    : status === "speaking"
+                      ? "Listening to VaaniCare..."
+                      : "Processing..."}
+              </p>
+            </div>
+            <p className="text-[#6FE3D6]/40 text-xs">
+              {status === "idle"
+                ? "മൈക്രോഫോൺ ടാപ്പ് ചെയ്യുക"
+                : "ഞാൻ കേൾക്കുന്നു..."}
             </p>
           </div>
         </footer>
