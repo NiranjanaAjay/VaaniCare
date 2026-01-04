@@ -1,24 +1,19 @@
-import React, { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Header } from '@/components/Header';
 import { VoiceIndicator } from '@/components/VoiceButton';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { useTranslation } from '@/contexts/TranslationContext';
-import { useVoiceRecognition } from '@/hooks/useVoiceRecognition';
+import { useWhisperRecognition } from '@/hooks/useWhisperRecognition';
 import { useSpeechSynthesis } from '@/hooks/useSpeechSynthesis';
-import { 
-  Building2, 
-  Search, 
-  CheckCircle2, 
-  FileSearch,
-  ChevronRight,
-  IndianRupee,
-  Users,
-  Heart,
-  GraduationCap,
-  Home,
+import {
+  Send,
   Mic,
-  Volume2
+  Volume2,
+  ExternalLink,
+  ChevronRight,
+  Info
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -26,68 +21,64 @@ interface GovernmentScreenProps {
   onBack: () => void;
 }
 
-type GovOption = 'schemes' | 'eligibility' | 'track';
-
 interface Scheme {
-  id: string;
-  name: { en: string; ml: string };
-  description: { en: string; ml: string };
-  benefit: string;
-  category: string;
-  icon: React.ElementType;
+  title: string;
+  url: string;
+  snippet: string;
+  source_query: string;
 }
 
-const schemes: Scheme[] = [
-  {
-    id: 'pmkisan',
-    name: { en: 'PM-KISAN', ml: 'പിഎം-കിസാൻ' },
-    description: { en: 'Income support for farmers', ml: 'കർഷകർക്ക് വരുമാന പിന്തുണ' },
-    benefit: '₹6,000/year',
-    category: 'agriculture',
-    icon: Users
-  },
-  {
-    id: 'ayushman',
-    name: { en: 'Ayushman Bharat', ml: 'ആയുഷ്മാൻ ഭാരത്' },
-    description: { en: 'Health insurance coverage', ml: 'ആരോഗ്യ ഇൻഷുറൻസ് പരിരക്ഷ' },
-    benefit: '₹5 Lakhs',
-    category: 'health',
-    icon: Heart
-  },
-  {
-    id: 'pmay',
-    name: { en: 'PM Awas Yojana', ml: 'പിഎം ആവാസ് യോജന' },
-    description: { en: 'Housing for all scheme', ml: 'എല്ലാവർക്കും വീട്' },
-    benefit: '₹1.2-2.5 Lakhs',
-    category: 'housing',
-    icon: Home
-  },
-  {
-    id: 'scholarship',
-    name: { en: 'National Scholarship', ml: 'ദേശീയ സ്കോളർഷിപ്പ്' },
-    description: { en: 'Education support for students', ml: 'വിദ്യാർത്ഥികൾക്ക് വിദ്യാഭ്യാസ പിന്തുണ' },
-    benefit: 'Up to ₹50,000',
-    category: 'education',
-    icon: GraduationCap
-  },
+interface SchemeResponse {
+  query_state: string;
+  count: number;
+  schemes: Scheme[];
+  disclaimer: string;
+}
+
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  type?: 'text' | 'schemes';
+  data?: SchemeResponse;
+}
+
+interface UserData {
+  age: string;
+  gender: string;
+  state: string;
+  income_bracket: string;
+  occupation: string;
+  category: string;
+}
+
+const QUESTIONS = [
+  { key: 'age', en: "What is your age?", ml: "നിങ്ങളുടെ പ്രായം എത്രയാണ്?" },
+  { key: 'gender', en: "What is your gender?", ml: "നിങ്ങളുടെ ലിംഗഭേദം ഏതാണ്?" },
+  { key: 'state', en: "Which state do you live in?", ml: "നിങ്ങൾ ഏത് സംസ്ഥാനത്താണ് താമസിക്കുന്നത്?" },
+  { key: 'income_bracket', en: "What is your annual income bracket?", ml: "നിങ്ങളുടെ വാർഷിക വരുമാന പരിധി എത്രയാണ്?" },
+  { key: 'occupation', en: "What is your occupation?", ml: "നിങ്ങളുടെ ജോലി എന്താണ്?" },
+  { key: 'category', en: "Which social category do you belong to (e.g., General, OBC, SC, ST)?", ml: "നിങ്ങൾ ഏത് വിഭാഗത്തിലാണ് ഉൾപ്പെടുന്നത് (ഉദാഹരണത്തിന്: ജനറൽ, ഒബിസി, എസ്‌സി, എസ്‌ടി)?" },
 ];
 
 export function GovernmentScreen({ onBack }: GovernmentScreenProps) {
   const { t, currentLanguage } = useTranslation();
-  const [selectedOption, setSelectedOption] = useState<GovOption | null>(null);
-  const [selectedScheme, setSelectedScheme] = useState<Scheme | null>(null);
-  const [eligibilityChecked, setEligibilityChecked] = useState(false);
-  const [statusText, setStatusText] = useState('');
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [userData, setUserData] = useState<Partial<UserData>>({});
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(-1); // -1 means initial state
+  const [inputText, setInputText] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const shouldListenAfterSpeakRef = useRef(true);
 
-  const { isListening, startListening } = useVoiceRecognition({
-    language: currentLanguage,
-    onResult: handleVoiceResult,
-    onStart: () => setStatusText(t('app.listening')),
-    onError: () => {
-      setTimeout(() => {
-        if (shouldListenAfterSpeakRef.current) startListening();
-      }, 1000);
+  // Scroll to bottom on updates
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const { isListening, startListening, stopListening } = useWhisperRecognition({
+    onResult: (text) => {
+      handleMessageSubmit(text);
     }
   });
 
@@ -95,297 +86,242 @@ export function GovernmentScreen({ onBack }: GovernmentScreenProps) {
     language: currentLanguage,
     rate: 0.9,
     onEnd: () => {
-      if (shouldListenAfterSpeakRef.current) {
-        setTimeout(() => startListening(), 300);
+      if (shouldListenAfterSpeakRef.current && currentQuestionIndex < QUESTIONS.length) {
+        setTimeout(() => startListening(), 500);
       }
     }
   });
 
-  function handleVoiceResult(text: string, isFinal: boolean) {
-    if (!isFinal) return;
-    
-    const normalized = text.toLowerCase();
-    
-    // Handle back
-    if (normalized.includes('back') || normalized.includes('തിരികെ')) {
-      if (selectedScheme) {
-        setSelectedScheme(null);
-      } else if (selectedOption) {
-        setSelectedOption(null);
+  const addMessage = (role: 'user' | 'assistant', content: string, type: 'text' | 'schemes' = 'text', data?: any) => {
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      role,
+      content,
+      type,
+      data
+    };
+    setMessages(prev => [...prev, newMessage]);
+    return newMessage;
+  };
+
+  const askNextQuestion = (index: number, currentData?: Partial<UserData>) => {
+    // Add a slight delay before the assistant speaks to make it more natural
+    setTimeout(() => {
+      if (index < QUESTIONS.length) {
+        const question = QUESTIONS[index];
+        const text = currentLanguage === 'ml' ? question.ml : question.en;
+        addMessage('assistant', text);
+        speak(text);
+        setCurrentQuestionIndex(index);
+        setIsProcessing(false);
       } else {
-        shouldListenAfterSpeakRef.current = false;
-        onBack();
+        // All questions answered, fetch schemes
+        performFindSchemes(currentData || userData);
       }
-      return;
+    }, 1500);
+  };
+
+  const handleMessageSubmit = async (text: string) => {
+    if (!text.trim() || isProcessing) return;
+
+    setIsProcessing(true);
+    addMessage('user', text);
+    setInputText('');
+
+    // Update userData based on current question
+    if (currentQuestionIndex >= 0 && currentQuestionIndex < QUESTIONS.length) {
+      const field = QUESTIONS[currentQuestionIndex].key;
+      const updatedData = { ...userData, [field]: text };
+      setUserData(updatedData);
+
+      // Move to next question logic with the updated data
+      askNextQuestion(currentQuestionIndex + 1, updatedData);
+    } else {
+      setIsProcessing(false);
     }
+  };
 
-    // Detect option
-    if (normalized.includes('scheme') || normalized.includes('find') || 
-        normalized.includes('പദ്ധതി') || normalized.includes('കണ്ടെത്തുക')) {
-      handleOptionSelect('schemes');
-      return;
+  const performFindSchemes = async (profileData: Partial<UserData>) => {
+    setIsProcessing(true);
+    const loadingMsg = currentLanguage === 'ml'
+      ? "നിങ്ങൾക്കായി ഏറ്റവും അനുയോജ്യമായ പദ്ധതികൾ ഞാൻ കണ്ടെത്തുകയാണ്..."
+      : "I'm finding the best schemes for you...";
+    addMessage('assistant', loadingMsg);
+    speak(loadingMsg);
+
+    try {
+      const response = await fetch('http://127.0.0.1:8000/find-schemes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profileData)
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch schemes');
+
+      const result: SchemeResponse = await response.json();
+
+      const successMsg = currentLanguage === 'ml'
+        ? `${result.count} പദ്ധതികൾ കണ്ടെത്തി.`
+        : `Found ${result.count} schemes for you.`;
+
+      addMessage('assistant', successMsg, 'schemes', result);
+      speak(successMsg);
+    } catch (error) {
+      console.error('Error finding schemes:', error);
+      const errorMsg = currentLanguage === 'ml'
+        ? "ക്ഷമിക്കണം, പദ്ധതികൾ കണ്ടെത്തുന്നതിൽ ഒരു പിശക് സംഭവിച്ചു. ദയവായി പിന്നീട് ശ്രമിക്കുക."
+        : "Sorry, I encountered an error while finding schemes. Please try again later.";
+      addMessage('assistant', errorMsg);
+      speak(errorMsg);
+    } finally {
+      setIsProcessing(false);
+      setCurrentQuestionIndex(QUESTIONS.length); // End of flow
     }
+  };
 
-    if (normalized.includes('eligib') || normalized.includes('check') || 
-        normalized.includes('അർഹത') || normalized.includes('പരിശോധിക്കുക')) {
-      handleOptionSelect('eligibility');
-      return;
-    }
-
-    if (normalized.includes('track') || normalized.includes('application') || 
-        normalized.includes('ട്രാക്ക്') || normalized.includes('അപേക്ഷ')) {
-      handleOptionSelect('track');
-      return;
-    }
-
-    // Detect scheme names
-    for (const scheme of schemes) {
-      if (normalized.includes(scheme.name.en.toLowerCase()) || 
-          normalized.includes(scheme.name.ml.toLowerCase()) ||
-          normalized.includes(scheme.id)) {
-        handleSchemeSelect(scheme);
-        return;
-      }
-    }
-
-    // Number-based selection
-    if (selectedOption === 'schemes') {
-      const numbers = ['one', 'two', 'three', 'four', 'ഒന്ന്', 'രണ്ട്', 'മൂന്ന്', 'നാല്'];
-      for (let i = 0; i < schemes.length; i++) {
-        if (normalized.includes(String(i + 1)) || normalized.includes(numbers[i])) {
-          handleSchemeSelect(schemes[i]);
-          return;
-        }
-      }
-    }
-
-    setStatusText(t('voice.tryAgain'));
-    speak(t('voice.tryAgain'));
-  }
-
-  // Speak initial prompt
+  // Initial prompt
   useEffect(() => {
+    // Reset conversation if language changes or on mount
+    setMessages([]);
+    setUserData({});
+    setCurrentQuestionIndex(-1);
+
     const timer = setTimeout(() => {
-      speak(t('services.government.voicePrompt'));
-      setStatusText(t('services.government.voicePrompt'));
-    }, 300);
+      const welcome = currentLanguage === 'ml'
+        ? "നമസ്കാരം! നിങ്ങൾക്ക് അനുയോജ്യമായ സർക്കാർ പദ്ധതികൾ കണ്ടെത്താൻ ഞാൻ സഹായിക്കാം. കുറച്ച് വിവരങ്ങൾ നൽകുക."
+        : "Hello! I can help you find suitable government schemes. Please provide some details.";
+      addMessage('assistant', welcome);
+
+      // We'll use a local variable to ensure we don't have race conditions with state
+      speak(welcome);
+
+      // Increased delay to 6 seconds for the long welcome message in Malayalam
+      const questionTimer = setTimeout(() => {
+        askNextQuestion(0);
+      }, currentLanguage === 'ml' ? 6000 : 4000);
+
+      return () => clearTimeout(questionTimer);
+    }, 1000);
+
     return () => clearTimeout(timer);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleOptionSelect = (option: GovOption) => {
-    setSelectedOption(option);
-    const optionName = t(`services.government.${option}`);
-    speak(optionName);
-    setStatusText(optionName);
-  };
-
-  const handleSchemeSelect = (scheme: Scheme) => {
-    setSelectedScheme(scheme);
-    const schemeName = scheme.name[currentLanguage as 'en' | 'ml'] || scheme.name.en;
-    speak(schemeName);
-    setStatusText(schemeName);
-  };
-
-  const handleCheckEligibility = () => {
-    setEligibilityChecked(true);
-    const msg = t('schemes.eligible');
-    speak(msg);
-    setStatusText(msg);
-  };
-
-  const options = [
-    { id: 'schemes' as GovOption, icon: Search },
-    { id: 'eligibility' as GovOption, icon: CheckCircle2 },
-    { id: 'track' as GovOption, icon: FileSearch },
-  ];
+  }, [currentLanguage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-blue-50 to-background dark:from-blue-950/20">
-      <Header 
-        title={t('services.government.name')} 
-        showBack 
-        onBack={selectedScheme ? () => setSelectedScheme(null) : selectedOption ? () => setSelectedOption(null) : onBack}
+    <div className="h-screen flex flex-col bg-background">
+      <Header
+        title={t('services.government.name')}
+        showBack
+        onBack={() => {
+          shouldListenAfterSpeakRef.current = false;
+          stopListening();
+          onBack();
+        }}
       />
 
-      <main className="flex-1 flex flex-col px-4 py-6 pb-32">
-        <div className="max-w-lg mx-auto w-full flex flex-col gap-6">
-          {/* Status */}
-          <div className="text-center">
-            <p className={cn(
-              'text-lg sm:text-xl',
-              isSpeaking && 'text-green-600 font-medium',
-              isListening && 'text-primary font-medium'
+      {/* Messages area */}
+      <main className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
+        {messages.map((msg) => (
+          <div
+            key={msg.id}
+            className={cn(
+              "flex w-full mb-4",
+              msg.role === 'user' ? "justify-end" : "justify-start"
+            )}
+          >
+            <div className={cn(
+              "max-w-[85%] rounded-2xl p-4 shadow-sm transition-all animate-in fade-in slide-in-from-bottom-2",
+              msg.role === 'user'
+                ? "bg-primary text-primary-foreground rounded-tr-none"
+                : "bg-muted text-foreground rounded-tl-none border"
             )}>
-              {statusText}
-            </p>
-          </div>
-
-          {/* Main Menu */}
-          {!selectedOption && (
-            <div className="space-y-4">
-              {options.map((option) => {
-                const Icon = option.icon;
-                return (
-                  <Card 
-                    key={option.id}
-                    className="cursor-pointer transition-all hover:shadow-lg active:scale-[0.98]"
-                    onClick={() => handleOptionSelect(option.id)}
-                  >
-                    <CardContent className="p-6 flex items-center gap-4">
-                      <div className="w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                        <Icon className="w-8 h-8 text-blue-600" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-xl font-bold">{t(`services.government.${option.id}`)}</p>
-                      </div>
-                      <ChevronRight className="w-6 h-6 text-muted-foreground" />
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Schemes List */}
-          {selectedOption === 'schemes' && !selectedScheme && (
-            <div className="space-y-4">
-              <h2 className="text-xl font-bold">{t('schemes.title')}</h2>
-              {schemes.map((scheme, index) => {
-                const Icon = scheme.icon;
-                return (
-                  <Card 
-                    key={scheme.id}
-                    className="cursor-pointer transition-all hover:shadow-lg"
-                    onClick={() => handleSchemeSelect(scheme)}
-                  >
-                    <CardContent className="p-4 flex items-center gap-4">
-                      <div className="w-14 h-14 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                        <Icon className="w-7 h-7 text-blue-600" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-semibold text-lg">
-                          {index + 1}. {scheme.name[currentLanguage as 'en' | 'ml'] || scheme.name.en}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {scheme.description[currentLanguage as 'en' | 'ml'] || scheme.description.en}
-                        </p>
-                        <p className="text-sm font-medium text-blue-600 flex items-center gap-1 mt-1">
-                          <IndianRupee className="w-4 h-4" />
-                          {scheme.benefit}
-                        </p>
-                      </div>
-                      <ChevronRight className="w-5 h-5 text-muted-foreground" />
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Scheme Details */}
-          {selectedScheme && (
-            <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Building2 className="w-6 h-6 text-blue-600" />
-                    {selectedScheme.name[currentLanguage as 'en' | 'ml'] || selectedScheme.name.en}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <p className="text-lg">
-                    {selectedScheme.description[currentLanguage as 'en' | 'ml'] || selectedScheme.description.en}
-                  </p>
-                  <div className="p-4 bg-blue-50 dark:bg-blue-950/30 rounded-xl">
-                    <p className="text-sm text-muted-foreground">{t('schemes.benefits')}</p>
-                    <p className="text-2xl font-bold text-blue-600">{selectedScheme.benefit}</p>
+              {msg.type === 'schemes' && msg.data ? (
+                <div className="space-y-4">
+                  <p className="font-semibold text-lg border-bottom pb-2 mb-2 border-primary/20">{msg.content}</p>
+                  <div className="grid gap-4">
+                    {msg.data.schemes.map((scheme, idx) => (
+                      <Card key={idx} className="overflow-hidden border-primary/20 hover:border-primary transition-colors">
+                        <CardContent className="p-4">
+                          <h3 className="font-bold text-lg text-primary flex items-start gap-2">
+                            <span className="mt-1 shrink-0"><ChevronRight className="w-4 h-4" /></span>
+                            {scheme.title}
+                          </h3>
+                          <p className="text-sm text-muted-foreground mt-2 line-clamp-3">
+                            {scheme.snippet}
+                          </p>
+                          <a
+                            href={scheme.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+                          >
+                            {currentLanguage === 'ml' ? 'വിവരങ്ങൾ കാണുക' : 'View Details'} <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
-                  
-                  {!eligibilityChecked ? (
-                    <Button 
-                      variant="government" 
-                      className="w-full h-14 text-lg"
-                      onClick={handleCheckEligibility}
-                    >
-                      <CheckCircle2 className="w-5 h-5 mr-2" />
-                      {t('schemes.checkEligibility')}
-                    </Button>
-                  ) : (
-                    <div className="text-center py-4">
-                      <div className="w-16 h-16 mx-auto bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mb-3">
-                        <CheckCircle2 className="w-10 h-10 text-green-600" />
-                      </div>
-                      <p className="text-xl font-bold text-green-600">{t('schemes.eligible')}</p>
-                      <Button variant="government" className="w-full h-14 text-lg mt-4">
-                        {t('schemes.apply')}
-                      </Button>
+                  {msg.data.disclaimer && (
+                    <div className="flex gap-2 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg mt-2 text-xs text-blue-800 dark:text-blue-200">
+                      <Info className="w-4 h-4 shrink-0" />
+                      <p>{msg.data.disclaimer}</p>
                     </div>
                   )}
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {/* Eligibility Check */}
-          {selectedOption === 'eligibility' && !selectedScheme && (
-            <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t('schemes.checkEligibility')}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-lg text-muted-foreground mb-4">
-                    {currentLanguage === 'ml' 
-                      ? 'അർഹത പരിശോധിക്കാൻ ഒരു പദ്ധതി തിരഞ്ഞെടുക്കുക'
-                      : 'Select a scheme to check your eligibility'}
-                  </p>
-                  <Button variant="government" className="w-full" onClick={() => setSelectedOption('schemes')}>
-                    {t('services.government.schemes')}
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {/* Track Application */}
-          {selectedOption === 'track' && (
-            <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileSearch className="w-6 h-6 text-blue-600" />
-                    {t('services.government.track')}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-lg text-muted-foreground">
-                    {currentLanguage === 'ml'
-                      ? 'അപേക്ഷ ട്രാക്കിംഗ് ഉടൻ വരുന്നു...'
-                      : 'Application tracking coming soon...'}
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {/* Voice Status Indicator */}
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
-            <div className={cn(
-              'w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300',
-              isListening && 'bg-red-500 animate-pulse',
-              isSpeaking && 'bg-green-500',
-              !isListening && !isSpeaking && 'bg-primary/20'
-            )}>
-              {isSpeaking ? (
-                <Volume2 className="w-8 h-8 text-white animate-pulse" />
+                </div>
               ) : (
-                <Mic className={cn('w-8 h-8', isListening ? 'text-white' : 'text-primary')} />
+                <p className="text-lg leading-relaxed">{msg.content}</p>
               )}
             </div>
-            <VoiceIndicator isActive={isListening || isSpeaking} />
+          </div>
+        ))}
+        <div ref={messagesEndRef} />
+      </main>
+
+      {/* Bottom Input Area */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/80 backdrop-blur-md border-t">
+        <div className="max-w-2xl mx-auto flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="icon"
+            className={cn(
+              "h-14 w-14 rounded-full transition-all duration-300",
+              isListening ? "bg-red-500 hover:bg-red-600 text-white animate-pulse" :
+                isSpeaking ? "bg-green-500 hover:bg-green-600 text-white" :
+                  "bg-primary/10 text-primary hover:bg-primary/20"
+            )}
+            onClick={isListening ? stopListening : () => startListening()}
+            disabled={isProcessing && !isListening}
+          >
+            {isSpeaking ? (
+              <Volume2 className="h-6 w-6 animate-pulse" />
+            ) : (
+              <Mic className={cn("h-6 w-6", isListening && "animate-bounce")} />
+            )}
+          </Button>
+
+          <div className="flex-1 relative">
+            <Input
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleMessageSubmit(inputText)}
+              placeholder={isListening ? (currentLanguage === 'ml' ? "ശ്രദ്ധിക്കുന്നു..." : "Listening...") : (currentLanguage === 'ml' ? "മറുപടി ടൈപ്പ് ചെയ്യുക..." : "Type your answer...")}
+              className="h-14 rounded-2xl pr-12 text-lg shadow-inner bg-muted/50 border-none focus-visible:ring-primary/20"
+              disabled={isProcessing}
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 text-primary hover:bg-primary/10 rounded-xl"
+              onClick={() => handleMessageSubmit(inputText)}
+              disabled={isProcessing || !inputText.trim()}
+            >
+              <Send className="h-5 w-5" />
+            </Button>
           </div>
         </div>
-      </main>
+        <div className="mt-2 text-center">
+          <VoiceIndicator isActive={isListening || isSpeaking} />
+        </div>
+      </div>
     </div>
   );
 }
