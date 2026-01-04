@@ -1,0 +1,21 @@
+{
+  "name": "VaaniCare",
+  "short_name": "VaaniCare",
+  "description": "Your Voice, Your Care - Human-centric voice-first services for everyone",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B1624",
+  "theme_color": "#2FB7B3",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["health", "government", "utilities"],
+  "lang": "en",
+  "dir": "ltr"
+}

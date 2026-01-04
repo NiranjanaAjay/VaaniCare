@@ -1,0 +1,119 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@400;500;600;700&family=Noto+Sans+Malayalam:wght@400;500;600;700&display=swap");
+@import "tailwindcss";
+
+:root {
+  /* Vital Flow Color Palette */
+  --color-deep-navy: #0b1624;
+  --color-navy-light: #132238;
+  --color-teal: #2fb7b3;
+  --color-aqua: #6fe3d6;
+  --color-soft-green: #a8e6a1;
+  --color-warm-amber: #f2a24b;
+  --color-glow: rgba(111, 227, 214, 0.15);
+
+  font-family: "Nunito", "Inter", "Noto Sans Malayalam", system-ui, sans-serif;
+  line-height: 1.6;
+  font-weight: 500;
+  color-scheme: dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  background-color: var(--color-deep-navy);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Breathing Animation */
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+
+  50% {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes wave {
+  0%,
+  100% {
+    height: 20px;
+  }
+
+  50% {
+    height: 40px;
+  }
+}
+
+.animate-breathe {
+  animation: breathe 4s ease-in-out infinite;
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 3s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* Gradient Text */
+.text-gradient-vital {
+  background: linear-gradient(
+    135deg,
+    #2fb7b3 0%,
+    #6fe3d6 50%,
+    #a8e6a1 75%,
+    #f2a24b 100%
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glow Effects */
+.glow-teal {
+  box-shadow: 0 0 40px rgba(47, 183, 179, 0.2);
+}
+
+.glow-amber {
+  box-shadow: 0 0 40px rgba(242, 162, 75, 0.2);
+}

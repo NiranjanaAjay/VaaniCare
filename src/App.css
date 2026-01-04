@@ -1,0 +1,4 @@
+/* App-level styles - keeping minimal as we use Tailwind */
+#root {
+  min-height: 100vh;
+}

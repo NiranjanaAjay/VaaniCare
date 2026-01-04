@@ -1,51 +1,73 @@
-Project “VaaniCare”: Voice-First AI Assistant for Inclusive Access to Essential Services
+# React + TypeScript + Vite
 
-Many elderly, disabled, and illiterate individuals are unable to access critical services like healthcare, emergency support, legal aid, government welfare schemes, and employment because modern digital systems assume users can read, type, navigate apps, and understand English.
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-The Idea
+Currently, two official plugins are available:
 
-VaaniCare is a voice-first, multilingual Progressive Web App (PWA) that allows users to access essential services entirely through speech.
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
 
-Users simply speak in their local language (English & Malayalam for MVP), and VaaniCare:
+## React Compiler
 
-Understands their intent
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-Guides them step-by-step using voice
+## Expanding the ESLint configuration
 
-Connects them to the right service
+If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
 
-Assists with actions like bookings, applications, and discovery
+```js
+export default defineConfig([
+  globalIgnores(["dist"]),
+  {
+    files: ["**/*.{ts,tsx}"],
+    extends: [
+      // Other configs...
 
-The system behaves like a human assistant, not a chatbot.
+      // Remove tseslint.configs.recommended and replace with this
+      tseslint.configs.recommendedTypeChecked,
+      // Alternatively, use this for stricter rules
+      tseslint.configs.strictTypeChecked,
+      // Optionally, add this for stylistic rules
+      tseslint.configs.stylisticTypeChecked,
 
-How It Works (High-Level)
+      // Other configs...
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ["./tsconfig.node.json", "./tsconfig.app.json"],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+]);
+```
 
-VaaniCare uses a multi-agent AI architecture, where each agent specializes in a service domain:
+You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
 
-Healthcare Agent – hospitals, free treatment, appointments
+```js
+// eslint.config.js
+import reactX from "eslint-plugin-react-x";
+import reactDom from "eslint-plugin-react-dom";
 
-Emergency Services Agent – urgent help, helplines, escalation
-
-Legal Aid Agent – legal support, NGOs, basic guidance
-
-Government Schemes Agent – eligibility, benefits, applications
-
-Employment Agent – job discovery and guidance
-
-An intent detection layer routes the user’s spoken request to the correct agent, while maintaining conversational context across multiple services.
-
-Unique Selling Point (USP)
-
-“If you can speak, you can access care.”
-
-Unlike typical service apps that only provide information, VaaniCare performs actions:
-
-Conversational data collection
-
-Step-by-step guidance
-
-Voice confirmations
-
-Agent-driven task execution
-
-No reading. No typing. No navigating complex menus.
+export default defineConfig([
+  globalIgnores(["dist"]),
+  {
+    files: ["**/*.{ts,tsx}"],
+    extends: [
+      // Other configs...
+      // Enable lint rules for React
+      reactX.configs["recommended-typescript"],
+      // Enable lint rules for React DOM
+      reactDom.configs.recommended,
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ["./tsconfig.node.json", "./tsconfig.app.json"],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+]);
+```
