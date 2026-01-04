@@ -6,6 +6,8 @@ import {
   Mic,
   ArrowRight,
   Activity,
+  Scale,
+  Briefcase,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -36,12 +38,28 @@ const services: ServiceButton[] = [
     route: "/conversation/emergency",
   },
   {
+    id: "legal",
+    icon: Scale,
+    label: "Legal Aid",
+    labelMalayalam: "നിയമ സഹായം",
+    description: "Legal support, NGOs & guidance",
+    route: "/conversation/legal",
+  },
+  {
     id: "government",
     icon: Landmark,
     label: "Government",
     labelMalayalam: "സർക്കാർ പദ്ധതികൾ",
     description: "Explore schemes & benefits for you",
     route: "/conversation/government",
+  },
+  {
+    id: "employment",
+    icon: Briefcase,
+    label: "Employment",
+    labelMalayalam: "തൊഴിൽ സഹായം",
+    description: "Find jobs & career opportunities",
+    route: "/conversation/employment",
   },
 ];
 
