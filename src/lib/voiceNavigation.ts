@@ -1,11 +1,6 @@
 // Voice Navigation Types and Utilities
 
-export type ServiceId =
-  | "healthcare"
-  | "emergency"
-  | "legal"
-  | "government"
-  | "employment";
+export type ServiceId = "healthcare" | "emergency" | "legal" | "government";
 
 export type VoiceAction =
   | "navigate"
@@ -153,40 +148,6 @@ export const serviceKeywords: Record<
   government: {
     en: [
       "government",
-      "scheme",
-      "pension",
-      "subsidy",
-      "benefit",
-      "welfare",
-      "ration",
-      "card",
-      "certificate",
-      "document",
-      "registration",
-      "application",
-      "eligibility",
-      "sarkar",
-    ],
-    ml: [
-      "സർക്കാർ",
-      "പദ്ധതി",
-      "പെൻഷൻ",
-      "സബ്സിഡി",
-      "ആനുകൂല്യം",
-      "ക്ഷേമം",
-      "റേഷൻ",
-      "കാർഡ്",
-      "സർട്ടിഫിക്കറ്റ്",
-      "രജിസ്ട്രേഷൻ",
-      "സർക്കാരിന്റെ",
-      "പദ്ധതികൾ",
-      "പെൻഷൻ",
-      "സർക്കാരിൽ",
-      "government",
-      "sarkar",
-      "pension",
-      "scheme",
-      "ration",
     ],
   },
   employment: {

@@ -8,10 +8,10 @@
     "greetingAfternoon": "Good afternoon! How can I help you today?",
     "greetingEvening": "Good evening! How can I help you today?",
     "serviceOptions": "I can help you with the following services. Say the service name to select it.",
-    "serviceList": "Healthcare, for doctors and hospitals. Emergency, for police, ambulance and fire. Legal Aid, for lawyers and rights. Government, for schemes and pensions. Employment, for jobs and work.",
-    "fullGreetingMorning": "Good morning! Welcome to VaaniCare. I can help you with the following services. Healthcare, for doctors and hospitals. Emergency, for police, ambulance and fire. Legal Aid, for lawyers and rights. Government, for schemes and pensions. Employment, for jobs and work. Please say the service name to select.",
-    "fullGreetingAfternoon": "Good afternoon! Welcome to VaaniCare. I can help you with the following services. Healthcare, for doctors and hospitals. Emergency, for police, ambulance and fire. Legal Aid, for lawyers and rights. Government, for schemes and pensions. Employment, for jobs and work. Please say the service name to select.",
-    "fullGreetingEvening": "Good evening! Welcome to VaaniCare. I can help you with the following services. Healthcare, for doctors and hospitals. Emergency, for police, ambulance and fire. Legal Aid, for lawyers and rights. Government, for schemes and pensions. Employment, for jobs and work. Please say the service name to select.",
+    "serviceList": "Healthcare, for doctors and hospitals. Emergency, for police, ambulance and fire. Legal Aid, for lawyers and rights. Government, for schemes and pensions.",
+    "fullGreetingMorning": "Good morning! Welcome to VaaniCare. I can help you with the following services. Healthcare, for doctors and hospitals. Emergency, for police, ambulance and fire. Legal Aid, for lawyers and rights. Government, for schemes and pensions. Please say the service name to select.",
+    "fullGreetingAfternoon": "Good afternoon! Welcome to VaaniCare. I can help you with the following services. Healthcare, for doctors and hospitals. Emergency, for police, ambulance and fire. Legal Aid, for lawyers and rights. Government, for schemes and pensions. Please say the service name to select.",
+    "fullGreetingEvening": "Good evening! Welcome to VaaniCare. I can help you with the following services. Healthcare, for doctors and hospitals. Emergency, for police, ambulance and fire. Legal Aid, for lawyers and rights. Government, for schemes and pensions. Please say the service name to select.",
     "listening": "Listening...",
     "processing": "Processing...",
     "speaking": "Speaking...",
@@ -54,14 +54,6 @@
       "schemes": "Find Schemes",
       "eligibility": "Check Eligibility",
       "track": "Track Application"
-    },
-    "employment": {
-      "name": "Employment",
-      "description": "Find jobs and work opportunities",
-      "voicePrompt": "You selected Employment. I can help you find jobs, create a resume, or learn new skills. What would you like to do?",
-      "findJobs": "Find Jobs",
-      "createResume": "Create Resume",
-      "learnSkills": "Learn Skills"
     }
   },
   "doctor": {

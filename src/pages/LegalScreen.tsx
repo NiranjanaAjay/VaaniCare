@@ -100,8 +100,19 @@ export function LegalScreen({ onBack }: LegalScreenProps) {
     language: currentLanguage,
     rate: 0.9,
     onEnd: () => {
-      if (shouldListenAfterSpeakRef.current) {
-        setTimeout(() => startListening(), 300);
+      if (!shouldListenAfterSpeakRef.current) return;
+
+      let shouldListen = false;
+      if (mode === 'select') {
+        shouldListen = true;
+      } else if (mode === 'lawyer' || mode === 'ai') {
+        if (currentQuestionIndex < QUESTIONS[mode].length) {
+          shouldListen = true;
+        }
+      }
+
+      if (shouldListen) {
+        setTimeout(() => startListening(), 500);
       }
     },
   });
@@ -116,17 +127,35 @@ export function LegalScreen({ onBack }: LegalScreenProps) {
       if (selectedOption) {
         setSelectedOption(null);
       } else {
-        shouldListenAfterSpeakRef.current = false;
-        onBack();
+        if (currentMode === 'lawyer') {
+          performFindLawyers(currentData || queryData);
+        } else {
+          performGetAIAdvice(currentData || queryData);
+        }
       }
       return;
     }
+  }
 
-    // Detect legal service
-    for (const service of legalServices) {
-      const serviceName = t(`services.legal.${service.id}`).toLowerCase();
-      if (normalized.includes(serviceName) || normalized.includes(service.id)) {
-        handleOptionSelect(service.id);
+  const handleMessageSubmit = async (text: string) => {
+    if (!text.trim() || isProcessing) return;
+
+    if (mode === 'select') {
+      const normalized = text.toLowerCase().trim();
+
+      // Ignore very short transcriptions (noise/filler) to prevent jumping or retries
+      if (normalized.length < 3) return;
+
+      const capturesLawyer = normalized.includes('lawyer') || normalized.includes('vakkil') || normalized.includes('വക്കീൽ') ||
+        normalized.includes('find') || normalized.includes('കാണണം');
+      const capturesAI = normalized.includes('ai') || normalized.includes('advice') || normalized.includes('ഉപദേശം') ||
+        normalized.includes('ask') || normalized.includes('ചോദിക്കണം');
+
+      if (capturesLawyer && !capturesAI) {
+        handleSelection('lawyer');
+        return;
+      } else if (capturesAI && !capturesLawyer) {
+        handleSelection('ai');
         return;
       }
     }
@@ -158,6 +187,11 @@ export function LegalScreen({ onBack }: LegalScreenProps) {
 
   // Speak initial prompt
   useEffect(() => {
+    setMessages([]);
+    setQueryData({});
+    setMode('select');
+    setCurrentQuestionIndex(-1);
+
     const timer = setTimeout(() => {
       speak(t("services.legal.voicePrompt"));
       setStatusText(t("services.legal.voicePrompt"));

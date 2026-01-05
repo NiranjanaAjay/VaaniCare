@@ -1,9 +1,13 @@
 import os
 import json
+import uuid
+from typing import Optional, Dict
+
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 from dotenv import load_dotenv
 from langchain_core.tools import tool
 from datetime import datetime
-from typing import Optional
 import ollama
 
 # Load environment variables
@@ -32,15 +36,44 @@ def call_ollama(prompt: str) -> str:
         print(f"Error calling Ollama: {e}")
         return ""
 
-# Store appointment context for the session
-appointment_context = {
+# Template for a fresh appointment context
+EMPTY_CONTEXT = {
     "doctor_specialty": None,
     "preferred_date": None,
     "preferred_time": None,
     "patient_name": None,
+    "patient_age": None,
+    "patient_phone": None,
     "reason": None,
-    "symptoms": None
+    "symptoms": None,
 }
+
+
+def new_context() -> Dict[str, Optional[str]]:
+    return {k: None for k in EMPTY_CONTEXT}
+
+
+# In-memory session store (request/response API conversations)
+session_contexts: Dict[str, Dict[str, Optional[str]]] = {}
+
+
+# FastAPI app for request/response usage
+app = FastAPI(title="Appointment Agent API")
+
+
+class ChatRequest(BaseModel):
+    user_input: str
+    session_id: Optional[str] = None
+
+
+class ChatResponse(BaseModel):
+    session_id: str
+    status: str
+    message: str
+    collected_info: Dict[str, str] = {}
+    missing_fields: Optional[list] = None
+    questions: Optional[str] = None
+    extracted_info: Optional[Dict[str, str]] = None
 
 # ========== CORE LOGIC FUNCTIONS ==========
 
@@ -193,45 +226,43 @@ def mock_book_appointment(appointment_summary: str) -> str:
     """Simulates booking an appointment."""
     return mock_book_appointment_logic(appointment_summary)
 
-def update_appointment_context(extracted_info: dict) -> None:
+def update_appointment_context(context: dict, extracted_info: dict) -> None:
     """
-    Updates global appointment context with newly extracted information.
+    Updates the provided appointment context with newly extracted information.
     Only updates fields that have actual values (not null).
     """
     if not extracted_info:
         return
-    
-    for key in appointment_context:
-        # Only update if we have a new value and field is currently empty
-        if extracted_info.get(key) and not appointment_context[key]:
-            appointment_context[key] = extracted_info[key]
 
-def process_appointment_booking(user_input: str) -> dict:
+    for key in context:
+        # Only update if we have a new value and field is currently empty
+        if extracted_info.get(key) and not context.get(key):
+            context[key] = extracted_info[key]
+
+def process_appointment_booking(user_input: str, context: dict) -> dict:
     """
     Manages the appointment booking flow with interactive information gathering.
     """
     # Step 1: Extract information from user input
     extracted = extract_appointment_info_logic(user_input)
-    
+
     # Step 2: Update context with new information (only if not already set)
-    for key, value in extracted.items():
-        if value and not appointment_context[key]:
-            appointment_context[key] = value
-    
+    update_appointment_context(context, extracted)
+
     # If we got symptoms but no reason, use symptoms as reason
-    if appointment_context.get("symptoms") and not appointment_context.get("reason"):
-        appointment_context["reason"] = appointment_context["symptoms"]
-    
+    if context.get("symptoms") and not context.get("reason"):
+        context["reason"] = context["symptoms"]
+
     # Step 3: Identify missing information
-    missing_required = identify_missing_info_logic(appointment_context)
-    
+    missing_required = identify_missing_info_logic(context)
+
     # Get info we've already collected for display
-    collected_info = {k: v for k, v in appointment_context.items() if v}
-    
+    collected_info = {k: v for k, v in context.items() if v}
+
     if missing_required:
         # Step 4: Generate clarification questions only for truly missing info
         questions = generate_clarification_questions_logic(missing_required)
-        
+
         collected_display = ""
         if collected_info:
             collected_display = "✓ Information collected so far:\n"
@@ -239,10 +270,10 @@ def process_appointment_booking(user_input: str) -> dict:
                 display_key = key.replace("_", " ").title()
                 collected_display += f"  • {display_key}: {value}\n"
             collected_display += "\n"
-        
+
         return {
             "status": "collecting_info",
-            "extracted_info": appointment_context.copy(),
+            "extracted_info": context.copy(),
             "collected_info": collected_info,
             "missing_fields": missing_required,
             "questions": questions,
@@ -252,17 +283,17 @@ def process_appointment_booking(user_input: str) -> dict:
         # Step 5: All required info collected - ask for additional symptoms
         return {
             "status": "ask_symptoms",
-            "extracted_info": appointment_context.copy(),
+            "extracted_info": context.copy(),
             "collected_info": collected_info,
             "message": "Great! I have all the required information.\n\nDo you have any additional symptoms or concerns you'd like to mention? (Type 'done' if nothing more to add)"
         }
 
-def process_user_input(user_input: str) -> dict:
+def process_user_input(user_input: str, context: dict) -> dict:
     """
     Main entry point for processing user input for appointment booking.
     """
     try:
-        result = process_appointment_booking(user_input)
+        result = process_appointment_booking(user_input, context)
         return result
     except Exception as e:
         return {
@@ -270,111 +301,66 @@ def process_user_input(user_input: str) -> dict:
             "response": str(e)
         }
 
-def is_all_fields_filled() -> bool:
-    """Check if all fields in appointment_context are filled"""
-    return all(value is not None for value in appointment_context.values())
+def is_all_fields_filled(context: dict) -> bool:
+    """Check if all fields in a given appointment context are filled"""
+    return all(value is not None for value in context.values())
 
-# Main function
+# Main function kept for optional CLI use
 def main():
+    ctx = new_context()
     print("=" * 70)
-    print("Doctor Appointment Booking Agent")
+    print("Doctor Appointment Booking Agent (CLI)")
     print("=" * 70)
-    print("\nThis agent will help you book a doctor appointment.")
-    print("Just tell me what you need, and I'll gather any missing information.")
     print("\nType 'exit' to quit\n")
-    
+
     while True:
         user_input = input("You: ").strip()
-        
+
         if user_input.lower() == 'exit':
             print("\nThank you for using Doctor Appointment Booking Agent. Goodbye!")
             break
-        
+
         if not user_input:
             print("Please enter a valid input.\n")
             continue
-        
-        print("\n🤖 Processing your request...")
-        try:
-            result = process_user_input(user_input)
-            
-            print(f"\n{'='*70}")
-            
-            if result["status"] == "collecting_info":
-                print("Agent:")
-                print(result["message"])
-                print(f"{'='*70}\n")
-            
-            elif result["status"] == "ask_symptoms":
-                print("Agent:")
-                print(result["message"])
-                print(f"{'='*70}\n")
-                
-                # Inner loop to handle symptoms collection
-                while True:
-                    symptoms_input = input("You: ").strip()
-                    
-                    if symptoms_input.lower() == 'done' or symptoms_input.lower() == 'no':
-                        # All done, print final appointment context
-                        print(f"\n{'='*70}")
-                        print("✅ APPOINTMENT DETAILS FINALIZED!")
-                        print("\nFinal Appointment Context:")
-                        print(json.dumps(appointment_context, indent=2))
-                        print(f"{'='*70}\n")
-                        
-                        # Reset context for next appointment
-                        for key in appointment_context:
-                            appointment_context[key] = None
-                        
-                        # Check if all fields are filled, exit outer loop if yes
-                        print("\nThank you for using Doctor Appointment Booking Agent. Goodbye!")
-                        return
-                    else:
-                        # User provided additional symptoms
-                        print("\n🤖 Processing additional symptoms...")
-                        extracted_symptoms = extract_appointment_info_logic(symptoms_input)
-                        
-                        # Update symptoms in context
-                        if extracted_symptoms.get("symptoms"):
-                            symptom_text = extracted_symptoms["symptoms"]
-                            # Convert list to string if needed
-                            if isinstance(symptom_text, list):
-                                symptom_text = ", ".join(symptom_text)
-                            
-                            if appointment_context["symptoms"]:
-                                # Convert existing symptoms to string if it's a list
-                                existing = appointment_context["symptoms"]
-                                if isinstance(existing, list):
-                                    existing = ", ".join(existing)
-                                appointment_context["symptoms"] = existing + ", " + symptom_text
-                            else:
-                                appointment_context["symptoms"] = symptom_text
-                        
-                        # Check if all fields are now filled
-                        if is_all_fields_filled():
-                            print(f"\n{'='*70}")
-                            print("✅ ALL APPOINTMENT DETAILS FILLED!")
-                            print("\nFinal Appointment Context:")
-                            print(json.dumps(appointment_context, indent=2))
-                            print(f"{'='*70}\n")
-                            
-                            # Reset context for next appointment
-                            for key in appointment_context:
-                                appointment_context[key] = None
-                            
-                            print("Thank you for using Doctor Appointment Booking Agent. Goodbye!")
-                            return
-                        
-                        print(f"\n{'='*70}")
-                        print("Agent: Got it! Any other symptoms or concerns? (Type 'done' if nothing more to add)")
-                        print(f"{'='*70}\n")
-                
-            else:
-                print(f"Error: {result.get('response', 'Unknown error')}")
-                print(f"{'='*70}\n")
-            
-        except Exception as e:
-            print(f"Error: {str(e)}\n")
+
+        result = process_user_input(user_input, ctx)
+        print(result.get("message", result))
+
+
+@app.post("/api/appointment/chat", response_model=ChatResponse)
+def chat(request: ChatRequest):
+    # Create or retrieve session
+    session_id = request.session_id or str(uuid.uuid4())
+    if session_id not in session_contexts:
+        session_contexts[session_id] = new_context()
+
+    ctx = session_contexts[session_id]
+
+    result = process_user_input(request.user_input, ctx)
+
+    # Reset if we reached final state and user said done/no in symptoms flow
+    if result.get("status") == "ask_symptoms" and request.user_input.strip().lower() in {"done", "no"}:
+        session_contexts[session_id] = new_context()
+
+    return ChatResponse(
+        session_id=session_id,
+        status=result.get("status", "error"),
+        message=result.get("message", ""),
+        collected_info=result.get("collected_info", {}),
+        missing_fields=result.get("missing_fields"),
+        questions=result.get("questions"),
+        extracted_info=result.get("extracted_info"),
+    )
+
+
+@app.post("/api/appointment/reset")
+def reset_session(session_id: Optional[str] = None):
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+    session_contexts[session_id] = new_context()
+    return {"status": "reset", "session_id": session_id}
+
 
 if __name__ == "__main__":
     main()

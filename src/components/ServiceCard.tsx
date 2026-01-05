@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   Scale,
   Building2,
-  Briefcase,
   LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -22,7 +21,6 @@ const serviceIcons: Record<ServiceId, LucideIcon> = {
   emergency: AlertTriangle,
   legal: Scale,
   government: Building2,
-  employment: Briefcase,
 };
 
 const serviceStyles: Record<ServiceId, string> = {
@@ -30,7 +28,6 @@ const serviceStyles: Record<ServiceId, string> = {
   emergency: "service-card-emergency",
   legal: "service-card-legal",
   government: "service-card-government",
-  employment: "service-card-employment",
 };
 
 export function ServiceCard({
@@ -87,13 +84,7 @@ export function ServiceGrid({
   selectedService,
   translations,
 }: ServiceGridProps) {
-  const services: ServiceId[] = [
-    "healthcare",
-    "emergency",
-    "legal",
-    "government",
-    "employment",
-  ];
+  const services: ServiceId[] = ["healthcare", "emergency", "legal", "government"];
 
   return (
     <div className="grid grid-cols-1 gap-4 w-full max-w-lg mx-auto">
