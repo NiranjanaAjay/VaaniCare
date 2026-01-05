@@ -4,7 +4,6 @@ import { HealthcareScreen } from "@/pages/HealthcareScreen";
 import { EmergencyScreen } from "@/pages/EmergencyScreen";
 import { LegalScreen } from "@/pages/LegalScreen";
 import { GovernmentScreen } from "@/pages/GovernmentScreen";
-import { EmploymentScreen } from "@/pages/EmploymentScreen";
 import { TranslationProvider } from "@/contexts/TranslationContext";
 import { ServiceId } from "@/lib/voiceNavigation";
 
@@ -31,8 +30,6 @@ function AppContent() {
         return <LegalScreen onBack={handleBack} />;
       case "government":
         return <GovernmentScreen onBack={handleBack} />;
-      case "employment":
-        return <EmploymentScreen onBack={handleBack} />;
       default:
         return <HomeScreen onServiceSelect={handleServiceSelect} />;
     }

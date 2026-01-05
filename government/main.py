@@ -1,7 +1,9 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from government import duckduckgo_scheme_search
+from government import duckduckgo_scheme_search, duckduckgo_legal_search
+from dotenv import load_dotenv
+import httpx
 import os
 import tempfile
 

@@ -101,19 +101,7 @@ export function LegalScreen({ onBack }: LegalScreenProps) {
     rate: 0.9,
     onEnd: () => {
       if (!shouldListenAfterSpeakRef.current) return;
-
-      let shouldListen = false;
-      if (mode === 'select') {
-        shouldListen = true;
-      } else if (mode === 'lawyer' || mode === 'ai') {
-        if (currentQuestionIndex < QUESTIONS[mode].length) {
-          shouldListen = true;
-        }
-      }
-
-      if (shouldListen) {
-        setTimeout(() => startListening(), 500);
-      }
+      setTimeout(() => startListening(), 500);
     },
   });
 
@@ -127,71 +115,14 @@ export function LegalScreen({ onBack }: LegalScreenProps) {
       if (selectedOption) {
         setSelectedOption(null);
       } else {
-        if (currentMode === 'lawyer') {
-          performFindLawyers(currentData || queryData);
-        } else {
-          performGetAIAdvice(currentData || queryData);
-        }
+        onBack();
       }
       return;
     }
-  }
-
-  const handleMessageSubmit = async (text: string) => {
-    if (!text.trim() || isProcessing) return;
-
-    if (mode === 'select') {
-      const normalized = text.toLowerCase().trim();
-
-      // Ignore very short transcriptions (noise/filler) to prevent jumping or retries
-      if (normalized.length < 3) return;
-
-      const capturesLawyer = normalized.includes('lawyer') || normalized.includes('vakkil') || normalized.includes('വക്കീൽ') ||
-        normalized.includes('find') || normalized.includes('കാണണം');
-      const capturesAI = normalized.includes('ai') || normalized.includes('advice') || normalized.includes('ഉപദേശം') ||
-        normalized.includes('ask') || normalized.includes('ചോദിക്കണം');
-
-      if (capturesLawyer && !capturesAI) {
-        handleSelection('lawyer');
-        return;
-      } else if (capturesAI && !capturesLawyer) {
-        handleSelection('ai');
-        return;
-      }
-    }
-
-    // Additional keywords
-    if (
-      normalized.includes("lawyer") ||
-      normalized.includes("advocate") ||
-      normalized.includes("വക്കീൽ") ||
-      normalized.includes("അഭിഭാഷകൻ")
-    ) {
-      handleOptionSelect("consultation");
-      return;
-    }
-
-    if (normalized.includes("rights") || normalized.includes("അവകാശം")) {
-      handleOptionSelect("rights");
-      return;
-    }
-
-    if (normalized.includes("complaint") || normalized.includes("പരാതി")) {
-      handleOptionSelect("complaint");
-      return;
-    }
-
-    setStatusText(t("voice.tryAgain"));
-    speak(t("voice.tryAgain"));
   }
 
   // Speak initial prompt
   useEffect(() => {
-    setMessages([]);
-    setQueryData({});
-    setMode('select');
-    setCurrentQuestionIndex(-1);
-
     const timer = setTimeout(() => {
       speak(t("services.legal.voicePrompt"));
       setStatusText(t("services.legal.voicePrompt"));
