@@ -1,5 +1,5 @@
-import { useCallback, useRef, useState, useEffect } from 'react';
-import { groqTTS } from '@/services/groqTTS';
+import { useCallback, useRef, useState, useEffect } from "react";
+import { groqTTS } from "@/services/groqTTS";
 
 export interface UseSpeechSynthesisOptions {
   language?: string;
@@ -24,9 +24,11 @@ export interface UseSpeechSynthesisReturn {
 // Check if Groq API key is available
 const hasGroqKey = !!import.meta.env.VITE_GROQ_API_KEY;
 
-export function useSpeechSynthesis(options: UseSpeechSynthesisOptions = {}): UseSpeechSynthesisReturn {
+export function useSpeechSynthesis(
+  options: UseSpeechSynthesisOptions = {},
+): UseSpeechSynthesisReturn {
   const {
-    language = 'en-IN',
+    language = "en-IN",
     rate = 0.9,
     pitch = 1,
     volume = 1,
@@ -39,19 +41,20 @@ export function useSpeechSynthesis(options: UseSpeechSynthesisOptions = {}): Use
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
-  const isSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
+  const isSupported =
+    typeof window !== "undefined" && "speechSynthesis" in window;
 
   // Map language codes to synthesis language
   const getSynthesisLanguage = useCallback((lang: string): string => {
     const languageMap: Record<string, string> = {
-      'en': 'en-IN',
-      'ml': 'ml-IN',
-      'hi': 'hi-IN',
-      'ta': 'ta-IN',
-      'te': 'te-IN',
-      'kn': 'kn-IN',
-      'bn': 'bn-IN',
-      'mr': 'mr-IN',
+      en: "en-IN",
+      ml: "ml-IN",
+      hi: "hi-IN",
+      ta: "ta-IN",
+      te: "te-IN",
+      kn: "kn-IN",
+      bn: "bn-IN",
+      mr: "mr-IN",
     };
     return languageMap[lang] || lang;
   }, []);
@@ -76,30 +79,33 @@ export function useSpeechSynthesis(options: UseSpeechSynthesisOptions = {}): Use
   }, [isSupported]);
 
   // Find the best voice for a language
-  const findVoice = useCallback((lang: string): SpeechSynthesisVoice | null => {
-    const targetLang = getSynthesisLanguage(lang);
+  const findVoice = useCallback(
+    (lang: string): SpeechSynthesisVoice | null => {
+      const targetLang = getSynthesisLanguage(lang);
 
-    // Try to find an exact match first
-    let voice = voices.find(v => v.lang === targetLang);
+      // Try to find an exact match first
+      let voice = voices.find((v) => v.lang === targetLang);
 
-    // If not found, try to find a voice that starts with the language code
-    if (!voice) {
-      const langPrefix = targetLang.split('-')[0];
-      voice = voices.find(v => v.lang.startsWith(langPrefix));
-    }
+      // If not found, try to find a voice that starts with the language code
+      if (!voice) {
+        const langPrefix = targetLang.split("-")[0];
+        voice = voices.find((v) => v.lang.startsWith(langPrefix));
+      }
 
-    // If still not found for Malayalam, try Google's voice
-    if (!voice && lang === 'ml') {
-      voice = voices.find(v => v.name.toLowerCase().includes('malayalam'));
-    }
+      // If still not found for Malayalam, try Google's voice
+      if (!voice && lang === "ml") {
+        voice = voices.find((v) => v.name.toLowerCase().includes("malayalam"));
+      }
 
-    // Fallback to default
-    if (!voice && voices.length > 0) {
-      voice = voices.find(v => v.default) || voices[0];
-    }
+      // Fallback to default
+      if (!voice && voices.length > 0) {
+        voice = voices.find((v) => v.default) || voices[0];
+      }
 
-    return voice || null;
-  }, [voices, getSynthesisLanguage]);
+      return voice || null;
+    },
+    [voices, getSynthesisLanguage],
+  );
 
   // Stop function - stops both Groq and browser TTS
   const stop = useCallback(() => {
@@ -114,100 +120,126 @@ export function useSpeechSynthesis(options: UseSpeechSynthesisOptions = {}): Use
   }, [isSupported]);
 
   // Browser-native TTS
-  const speakWithBrowser = useCallback((text: string) => {
-    if (!isSupported || !text) return;
+  const speakWithBrowser = useCallback(
+    (text: string) => {
+      if (!isSupported || !text) return;
 
-    // Cancel any ongoing speech
-    window.speechSynthesis.cancel();
+      // Cancel any ongoing speech
+      window.speechSynthesis.cancel();
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utteranceRef.current = utterance;
+      const utterance = new SpeechSynthesisUtterance(text);
+      utteranceRef.current = utterance;
 
-    const voice = findVoice(language);
-    if (voice) {
-      utterance.voice = voice;
-    }
-
-    utterance.lang = getSynthesisLanguage(language);
-    utterance.rate = rate;
-    utterance.pitch = pitch;
-    utterance.volume = volume;
-
-    utterance.onstart = () => {
-      setIsSpeaking(true);
-      onStart?.();
-    };
-
-    utterance.onend = () => {
-      setIsSpeaking(false);
-      onEnd?.();
-    };
-
-    utterance.onerror = (event) => {
-      setIsSpeaking(false);
-      onError?.(event.error);
-    };
-
-    // Workaround for Chrome bug where speech stops after ~15 seconds
-    const resumeSpeech = () => {
-      if (window.speechSynthesis.paused) {
-        window.speechSynthesis.resume();
+      const voice = findVoice(language);
+      if (voice) {
+        utterance.voice = voice;
       }
-    };
 
-    const interval = setInterval(resumeSpeech, 10000);
+      utterance.lang = getSynthesisLanguage(language);
+      utterance.rate = rate;
+      utterance.pitch = pitch;
+      utterance.volume = volume;
 
-    utterance.onend = () => {
-      clearInterval(interval);
-      setIsSpeaking(false);
-      onEnd?.();
-    };
+      utterance.onstart = () => {
+        setIsSpeaking(true);
+        onStart?.();
+      };
 
-    window.speechSynthesis.speak(utterance);
-  }, [isSupported, language, rate, pitch, volume, findVoice, getSynthesisLanguage, onStart, onEnd, onError]);
-
-  // Use Groq TTS for Malayalam when API key is available
-  const speakWithGroq = useCallback((text: string) => {
-    console.log('🎤 Using Groq TTS for Malayalam:', text.substring(0, 50) + '...');
-
-    setIsSpeaking(true);
-    onStart?.();
-
-    groqTTS.speak({
-      text,
-      language: 'ml',
-      onStart: () => {
-        // Already called above
-      },
-      onEnd: () => {
+      utterance.onend = () => {
         setIsSpeaking(false);
         onEnd?.();
-      },
-      onError: (error) => {
-        console.warn('⚠️ Groq TTS failed, falling back to browser TTS:', error);
+      };
+
+      utterance.onerror = (event) => {
         setIsSpeaking(false);
-        // Fallback to browser TTS
-        speakWithBrowser(text);
-      },
-    });
-  }, [onStart, onEnd, speakWithBrowser]);
+        onError?.(event.error);
+      };
+
+      // Workaround for Chrome bug where speech stops after ~15 seconds
+      const resumeSpeech = () => {
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
+      };
+
+      const interval = setInterval(resumeSpeech, 10000);
+
+      utterance.onend = () => {
+        clearInterval(interval);
+        setIsSpeaking(false);
+        onEnd?.();
+      };
+
+      window.speechSynthesis.speak(utterance);
+    },
+    [
+      isSupported,
+      language,
+      rate,
+      pitch,
+      volume,
+      findVoice,
+      getSynthesisLanguage,
+      onStart,
+      onEnd,
+      onError,
+    ],
+  );
+
+  // Use Groq TTS for Malayalam when API key is available
+  const speakWithGroq = useCallback(
+    (text: string) => {
+      console.log(
+        "🎤 Using Groq TTS for Malayalam:",
+        text.substring(0, 50) + "...",
+      );
+
+      setIsSpeaking(true);
+      onStart?.();
+
+      groqTTS.speak({
+        text,
+        language: "ml",
+        onStart: () => {
+          // Already called above
+        },
+        onEnd: () => {
+          setIsSpeaking(false);
+          onEnd?.();
+        },
+        onError: (error) => {
+          console.warn(
+            "⚠️ Groq TTS failed, falling back to browser TTS:",
+            error,
+          );
+          setIsSpeaking(false);
+          // Fallback to browser TTS
+          speakWithBrowser(text);
+        },
+      });
+    },
+    [onStart, onEnd, speakWithBrowser],
+  );
 
   // Main speak function - routes to Groq for Malayalam, browser for others
-  const speak = useCallback((text: string) => {
-    if (!text) return;
+  const speak = useCallback(
+    (text: string) => {
+      if (!text) return;
 
-    // Stop any ongoing speech first
-    stop();
+      // Stop any ongoing speech first
+      stop();
 
-    // Use Groq TTS for Malayalam if API key is available
-    const isMalayalam = language === 'ml' || language === 'ml-IN';
+      // Use Groq TTS for Malayalam if API key is available
+      const isMalayalam = language === "ml" || language === "ml-IN";
 
-    if (isMalayalam && hasGroqKey) {
-      speakWithGroq(text);
-    } else {
-      speakWithBrowser(text);
-    }
-  }, [language, speakWithGroq, speakWithBrowser, stop]);
+      if (isMalayalam && hasGroqKey) {
+        speakWithGroq(text);
+      } else {
+        speakWithBrowser(text);
+      }
+    },
+    [language, speakWithGroq, speakWithBrowser, stop],
+  );
 
   const pause = useCallback(() => {
     if (!isSupported) return;

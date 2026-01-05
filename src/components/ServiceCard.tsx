@@ -1,13 +1,13 @@
-import { 
-  Heart, 
-  AlertTriangle, 
-  Scale, 
-  Building2, 
+import {
+  Heart,
+  AlertTriangle,
+  Scale,
+  Building2,
   Briefcase,
-  LucideIcon 
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { ServiceId } from '@/lib/voiceNavigation';
+  LucideIcon,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ServiceId } from "@/lib/voiceNavigation";
 
 interface ServiceCardProps {
   id: ServiceId;
@@ -26,14 +26,20 @@ const serviceIcons: Record<ServiceId, LucideIcon> = {
 };
 
 const serviceStyles: Record<ServiceId, string> = {
-  healthcare: 'service-card-healthcare',
-  emergency: 'service-card-emergency',
-  legal: 'service-card-legal',
-  government: 'service-card-government',
-  employment: 'service-card-employment',
+  healthcare: "service-card-healthcare",
+  emergency: "service-card-emergency",
+  legal: "service-card-legal",
+  government: "service-card-government",
+  employment: "service-card-employment",
 };
 
-export function ServiceCard({ id, name, description, onClick, isSelected }: ServiceCardProps) {
+export function ServiceCard({
+  id,
+  name,
+  description,
+  onClick,
+  isSelected,
+}: ServiceCardProps) {
   const Icon = serviceIcons[id];
   const styleClass = serviceStyles[id];
 
@@ -41,9 +47,10 @@ export function ServiceCard({ id, name, description, onClick, isSelected }: Serv
     <button
       onClick={() => onClick(id)}
       className={cn(
-        'service-card w-full text-left',
+        "service-card w-full text-left",
         styleClass,
-        isSelected && 'ring-4 ring-white ring-offset-4 ring-offset-background scale-[1.02]'
+        isSelected &&
+          "ring-4 ring-white ring-offset-4 ring-offset-background scale-[1.02]",
       )}
       aria-label={`${name}: ${description}`}
       role="button"
@@ -75,8 +82,18 @@ interface ServiceGridProps {
   };
 }
 
-export function ServiceGrid({ onServiceSelect, selectedService, translations }: ServiceGridProps) {
-  const services: ServiceId[] = ['healthcare', 'emergency', 'legal', 'government', 'employment'];
+export function ServiceGrid({
+  onServiceSelect,
+  selectedService,
+  translations,
+}: ServiceGridProps) {
+  const services: ServiceId[] = [
+    "healthcare",
+    "emergency",
+    "legal",
+    "government",
+    "employment",
+  ];
 
   return (
     <div className="grid grid-cols-1 gap-4 w-full max-w-lg mx-auto">

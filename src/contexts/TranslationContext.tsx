@@ -1,6 +1,13 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
-import enTranslations from '@/translations/en.json';
-import mlTranslations from '@/translations/ml.json';
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  type ReactNode,
+} from "react";
+import enTranslations from "@/translations/en.json";
+import mlTranslations from "@/translations/ml.json";
 
 type TranslationData = typeof enTranslations;
 
@@ -17,11 +24,13 @@ const translations: Record<string, TranslationData> = {
 };
 
 export const supportedLanguages = [
-  { code: 'en', name: 'English', native: 'English' },
-  { code: 'ml', name: 'Malayalam', native: 'മലയാളം' },
+  { code: "en", name: "English", native: "English" },
+  { code: "ml", name: "Malayalam", native: "മലയാളം" },
 ];
 
-const TranslationContext = createContext<TranslationContextType | undefined>(undefined);
+const TranslationContext = createContext<TranslationContextType | undefined>(
+  undefined,
+);
 
 interface TranslationProviderProps {
   children: ReactNode;
@@ -29,14 +38,14 @@ interface TranslationProviderProps {
 
 export function TranslationProvider({ children }: TranslationProviderProps) {
   const [currentLanguage, setCurrentLanguage] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('vaanicare-language') || 'en';
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("vaanicare-language") || "en";
     }
-    return 'en';
+    return "en";
   });
 
   useEffect(() => {
-    localStorage.setItem('vaanicare-language', currentLanguage);
+    localStorage.setItem("vaanicare-language", currentLanguage);
     // Update HTML lang attribute for accessibility
     document.documentElement.lang = currentLanguage;
   }, [currentLanguage]);
@@ -47,31 +56,35 @@ export function TranslationProvider({ children }: TranslationProviderProps) {
     }
   }, []);
 
-  const t = useCallback((key: string): string => {
-    const keys = key.split('.');
-    const currentTranslations = translations[currentLanguage] || translations.en;
-    const fallbackTranslations = translations.en;
+  const t = useCallback(
+    (key: string): string => {
+      const keys = key.split(".");
+      const currentTranslations =
+        translations[currentLanguage] || translations.en;
+      const fallbackTranslations = translations.en;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let value: any = currentTranslations;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let fallbackValue: any = fallbackTranslations;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let value: any = currentTranslations;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let fallbackValue: any = fallbackTranslations;
 
-    for (const k of keys) {
-      value = value?.[k];
-      fallbackValue = fallbackValue?.[k];
-    }
+      for (const k of keys) {
+        value = value?.[k];
+        fallbackValue = fallbackValue?.[k];
+      }
 
-    if (typeof value === 'string') {
-      return value;
-    }
+      if (typeof value === "string") {
+        return value;
+      }
 
-    if (typeof fallbackValue === 'string') {
-      return fallbackValue;
-    }
+      if (typeof fallbackValue === "string") {
+        return fallbackValue;
+      }
 
-    return key;
-  }, [currentLanguage]);
+      return key;
+    },
+    [currentLanguage],
+  );
 
   const value: TranslationContextType = {
     currentLanguage,
@@ -90,7 +103,7 @@ export function TranslationProvider({ children }: TranslationProviderProps) {
 export function useTranslation(): TranslationContextType {
   const context = useContext(TranslationContext);
   if (context === undefined) {
-    throw new Error('useTranslation must be used within a TranslationProvider');
+    throw new Error("useTranslation must be used within a TranslationProvider");
   }
   return context;
 }

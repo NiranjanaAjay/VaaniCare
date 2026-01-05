@@ -1,7 +1,7 @@
-import { ArrowLeft, Home as HomeIcon, Volume2, VolumeX } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { LanguageToggle } from './LanguageSelector';
-import { cn } from '@/lib/utils';
+import { ArrowLeft, Home as HomeIcon, Volume2, VolumeX } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { LanguageToggle } from "./LanguageSelector";
+import { cn } from "@/lib/utils";
 
 interface HeaderProps {
   title?: string;
@@ -29,11 +29,13 @@ export function Header({
   className,
 }: HeaderProps) {
   return (
-    <header className={cn(
-      'sticky top-0 z-40 w-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60',
-      'border-b px-4 py-3 safe-area-top',
-      className
-    )}>
+    <header
+      className={cn(
+        "sticky top-0 z-40 w-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+        "border-b px-4 py-3 safe-area-top",
+        className,
+      )}
+    >
       <div className="flex items-center justify-between gap-4 max-w-lg mx-auto">
         {/* Left side - Navigation */}
         <div className="flex items-center gap-2">
@@ -76,7 +78,7 @@ export function Header({
               size="icon"
               onClick={onMuteToggle}
               className="h-12 w-12"
-              aria-label={isMuted ? 'Unmute' : 'Mute'}
+              aria-label={isMuted ? "Unmute" : "Mute"}
             >
               {isMuted ? (
                 <VolumeX className="h-6 w-6" />

@@ -1,10 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: ["class"],
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     container: {
       center: true,
@@ -52,28 +49,28 @@ export default {
         healthcare: {
           DEFAULT: "#ef4444",
           light: "#fecaca",
-          dark: "#991b1b"
+          dark: "#991b1b",
         },
         emergency: {
           DEFAULT: "#f97316",
           light: "#fed7aa",
-          dark: "#9a3412"
+          dark: "#9a3412",
         },
         legal: {
           DEFAULT: "#8b5cf6",
           light: "#ddd6fe",
-          dark: "#5b21b6"
+          dark: "#5b21b6",
         },
         government: {
           DEFAULT: "#3b82f6",
           light: "#bfdbfe",
-          dark: "#1d4ed8"
+          dark: "#1d4ed8",
         },
         employment: {
           DEFAULT: "#22c55e",
           light: "#bbf7d0",
-          dark: "#15803d"
-        }
+          dark: "#15803d",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -100,7 +97,7 @@ export default {
         "fade-in": {
           "0%": { opacity: "0", transform: "translateY(10px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
-        }
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -112,12 +109,12 @@ export default {
       fontSize: {
         // Extra large fonts for elderly users
         "2xs": "0.625rem",
-        "accessibility": "1.25rem",
+        accessibility: "1.25rem",
         "accessibility-lg": "1.5rem",
         "accessibility-xl": "2rem",
         "accessibility-2xl": "2.5rem",
-      }
+      },
     },
   },
   plugins: [require("tailwindcss-animate")],
-}
+};
