@@ -1,21 +1,22 @@
-import React, { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Header } from '@/components/Header';
 import { VoiceIndicator } from '@/components/VoiceButton';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { useTranslation } from '@/contexts/TranslationContext';
-import { useVoiceRecognition } from '@/hooks/useVoiceRecognition';
+import { useWhisperRecognition } from '@/hooks/useWhisperRecognition';
 import { useSpeechSynthesis } from '@/hooks/useSpeechSynthesis';
-import { 
-  Scale, 
-  MessageSquare, 
-  FileText, 
-  BookOpen,
-  Phone,
-  ChevronRight,
-  CheckCircle2,
+import {
+  Send,
   Mic,
-  Volume2
+  Volume2,
+  ExternalLink,
+  Scale,
+  Phone,
+  Bot,
+  UserRound,
+  ArrowRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -23,50 +24,59 @@ interface LegalScreenProps {
   onBack: () => void;
 }
 
-type LegalOption = 'consultation' | 'rights' | 'complaint';
-
-interface LegalService {
-  id: LegalOption;
-  icon: React.ElementType;
+interface Lawyer {
+  title: string;
+  url: string;
+  snippet: string;
 }
 
-const legalServices: LegalService[] = [
-  { id: 'consultation', icon: MessageSquare },
-  { id: 'rights', icon: BookOpen },
-  { id: 'complaint', icon: FileText },
-];
+interface LegalResponse {
+  issue: string;
+  location: string;
+  count: number;
+  results: Lawyer[];
+}
 
-// Mock rights data
-const rightsData = {
-  en: [
-    { title: 'Right to Legal Aid', description: 'Free legal services for those who cannot afford' },
-    { title: 'Right to Fair Trial', description: 'Every person has right to fair hearing' },
-    { title: 'Right Against Exploitation', description: 'Protection from forced labor and trafficking' },
-    { title: 'Right to Property', description: 'Right to acquire, hold and dispose of property' },
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  type?: 'text' | 'results' | 'advice';
+  data?: any;
+}
+
+type Mode = 'select' | 'lawyer' | 'ai';
+
+const QUESTIONS = {
+  lawyer: [
+    { key: 'issue', en: "What legal issue or problem are you facing?", ml: "നിങ്ങൾ നേരിടുന്ന നിയമപരമായ പ്രശ്നം എന്താണ്?" },
+    { key: 'location', en: "In which location (city or district) are you looking for legal help?", ml: "നിങ്ങൾ ഏത് സ്ഥലത്താണ് (നഗരം അല്ലെങ്കിൽ ജില്ല) നിയമ സഹായം തിരയുന്നത്?" },
   ],
-  ml: [
-    { title: 'നിയമ സഹായത്തിനുള്ള അവകാശം', description: 'കഴിയാത്തവർക്ക് സൗജന്യ നിയമ സേവനങ്ങൾ' },
-    { title: 'നീതിയുക്തമായ വിചാരണയ്ക്കുള്ള അവകാശം', description: 'എല്ലാവർക്കും നീതിയുക്തമായ വിചാരണ' },
-    { title: 'ചൂഷണത്തിനെതിരെയുള്ള അവകാശം', description: 'നിർബന്ധിത തൊഴിലിൽ നിന്ന് സംരക്ഷണം' },
-    { title: 'സ്വത്ത് അവകാശം', description: 'സ്വത്ത് സ്വന്തമാക്കാനുള്ള അവകാശം' },
-  ],
+  ai: [
+    { key: 'issue', en: "Please describe your legal issue in detail, and I'll provide AI-powered advice.", ml: "നിങ്ങളുടെ നിയമപരമായ പ്രശ്നം വിശദീകരിക്കുക, ഞാൻ നിങ്ങൾക്ക് വേണ്ട നിർദ്ദേശങ്ങൾ നൽകാം." },
+  ]
 };
 
 export function LegalScreen({ onBack }: LegalScreenProps) {
   const { t, currentLanguage } = useTranslation();
-  const [selectedOption, setSelectedOption] = useState<LegalOption | null>(null);
-  const [statusText, setStatusText] = useState('');
-  const [complaintSubmitted, setComplaintSubmitted] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [mode, setMode] = useState<Mode>('select');
+  const [queryData, setQueryData] = useState<any>({});
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(-1);
+  const [inputText, setInputText] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const shouldListenAfterSpeakRef = useRef(true);
 
-  const { isListening, startListening } = useVoiceRecognition({
-    language: currentLanguage,
-    onResult: handleVoiceResult,
-    onStart: () => setStatusText(t('app.listening')),
-    onError: () => {
-      setTimeout(() => {
-        if (shouldListenAfterSpeakRef.current) startListening();
-      }, 1000);
+  useEffect(() => {
+    if (mode !== 'select') {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, mode]);
+
+  const { isListening, startListening, stopListening } = useWhisperRecognition({
+    onResult: (text) => {
+      handleMessageSubmit(text);
     }
   });
 
@@ -74,249 +84,398 @@ export function LegalScreen({ onBack }: LegalScreenProps) {
     language: currentLanguage,
     rate: 0.9,
     onEnd: () => {
-      if (shouldListenAfterSpeakRef.current) {
-        setTimeout(() => startListening(), 300);
+      if (!shouldListenAfterSpeakRef.current) return;
+
+      let shouldListen = false;
+      if (mode === 'select') {
+        shouldListen = true;
+      } else if (mode === 'lawyer' || mode === 'ai') {
+        if (currentQuestionIndex < QUESTIONS[mode].length) {
+          shouldListen = true;
+        }
+      }
+
+      if (shouldListen) {
+        setTimeout(() => startListening(), 500);
       }
     }
   });
 
-  function handleVoiceResult(text: string, isFinal: boolean) {
-    if (!isFinal) return;
-    
-    const normalized = text.toLowerCase();
-    
-    // Handle back
-    if (normalized.includes('back') || normalized.includes('തിരികെ')) {
-      if (selectedOption) {
-        setSelectedOption(null);
-      } else {
-        shouldListenAfterSpeakRef.current = false;
-        onBack();
-      }
-      return;
-    }
+  const addMessage = (role: 'user' | 'assistant', content: string, type: 'text' | 'results' | 'advice' = 'text', data?: any) => {
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      role,
+      content,
+      type,
+      data
+    };
+    setMessages(prev => [...prev, newMessage]);
+    return newMessage;
+  };
 
-    // Detect legal service
-    for (const service of legalServices) {
-      const serviceName = t(`services.legal.${service.id}`).toLowerCase();
-      if (normalized.includes(serviceName) || normalized.includes(service.id)) {
-        handleOptionSelect(service.id);
+  const handleSelection = (choice: Mode) => {
+    setMode(choice);
+    const welcomeText = choice === 'lawyer'
+      ? (currentLanguage === 'ml' ? "ശരി, നമുക്ക് ഒരു വക്കീലിനെ കണ്ടെത്താം." : "Okay, let's find a lawyer for you.")
+      : (currentLanguage === 'ml' ? "ശരി, ഞാൻ നിങ്ങൾക്ക് ആവശ്യമായ ഉപദേശം നൽകാം." : "Okay, I will provide the legal advice you need.");
+
+    addMessage('assistant', welcomeText);
+    speak(welcomeText);
+
+    // After selection, we wait for the assistant to finish speaking the transition
+    // before asking the first specific question.
+    setTimeout(() => {
+      askNextQuestion(0, choice);
+    }, 2500);
+  };
+
+  const askNextQuestion = (index: number, currentMode: Mode, currentData?: any) => {
+    if (currentMode === 'select') return;
+
+    const questions = QUESTIONS[currentMode];
+    setTimeout(() => {
+      if (index < questions.length) {
+        const question = questions[index];
+        const text = currentLanguage === 'ml' ? question.ml : question.en;
+        addMessage('assistant', text);
+        speak(text);
+        setCurrentQuestionIndex(index);
+        setIsProcessing(false);
+      } else {
+        if (currentMode === 'lawyer') {
+          performFindLawyers(currentData || queryData);
+        } else {
+          performGetAIAdvice(currentData || queryData);
+        }
+      }
+    }, 1000);
+  };
+
+  const handleMessageSubmit = async (text: string) => {
+    if (!text.trim() || isProcessing) return;
+
+    if (mode === 'select') {
+      const normalized = text.toLowerCase().trim();
+
+      // Ignore very short transcriptions (noise/filler) to prevent jumping or retries
+      if (normalized.length < 3) return;
+
+      const capturesLawyer = normalized.includes('lawyer') || normalized.includes('vakkil') || normalized.includes('വക്കീൽ') ||
+        normalized.includes('find') || normalized.includes('കാണണം');
+      const capturesAI = normalized.includes('ai') || normalized.includes('advice') || normalized.includes('ഉപദേശം') ||
+        normalized.includes('ask') || normalized.includes('ചോദിക്കണം');
+
+      if (capturesLawyer && !capturesAI) {
+        handleSelection('lawyer');
+        return;
+      } else if (capturesAI && !capturesLawyer) {
+        handleSelection('ai');
         return;
       }
-    }
 
-    // Additional keywords
-    if (normalized.includes('lawyer') || normalized.includes('advocate') || 
-        normalized.includes('വക്കീൽ') || normalized.includes('അഭിഭാഷകൻ')) {
-      handleOptionSelect('consultation');
+      // Only add to chat and retry if it seems like a real sentence
+      if (normalized.length > 10) {
+        addMessage('user', text);
+        const retryText = currentLanguage === 'ml'
+          ? "ക്ഷമിക്കണം, എനിക്ക് മനസ്സിലായില്ല. നിങ്ങൾക്ക് ഒരു വക്കീലിനെ കണ്ടെത്തണോ അതോ എഐ ഉപദേശം വേണോ?"
+          : "Sorry, I didn't quite get that. Would you like to find a lawyer or get AI advice?";
+        addMessage('assistant', retryText);
+        speak(retryText);
+      }
       return;
     }
 
-    if (normalized.includes('rights') || normalized.includes('അവകാശം')) {
-      handleOptionSelect('rights');
-      return;
+    setIsProcessing(true);
+    addMessage('user', text);
+    setInputText('');
+
+    const questions = QUESTIONS[mode];
+    if (currentQuestionIndex >= 0 && currentQuestionIndex < questions.length) {
+      const field = questions[currentQuestionIndex].key;
+      const updatedData = { ...queryData, [field]: text };
+      setQueryData(updatedData);
+      askNextQuestion(currentQuestionIndex + 1, mode, updatedData);
+    } else {
+      setIsProcessing(false);
     }
+  };
 
-    if (normalized.includes('complaint') || normalized.includes('പരാതി')) {
-      handleOptionSelect('complaint');
-      return;
+  const performFindLawyers = async (data: any) => {
+    setIsProcessing(true);
+    const loadingMsg = currentLanguage === 'ml'
+      ? `${data.location} അതിൽ ${data.issue} സംബന്ധിച്ച നിയമ വിദഗ്ധരെ ഞാൻ തിരയുകയാണ്...`
+      : `I'm searching for legal advisors for ${data.issue} in ${data.location}...`;
+    addMessage('assistant', loadingMsg);
+    speak(loadingMsg);
+
+    try {
+      const response = await fetch('http://127.0.0.1:8000/find-lawyers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch layers');
+
+      const result: LegalResponse = await response.json();
+      const successMsg = currentLanguage === 'ml'
+        ? `${result.count} നിയമ വിദഗ്ധരെ കണ്ടെത്തി.`
+        : `Found ${result.count} legal advisors for you.`;
+
+      addMessage('assistant', successMsg, 'results', result);
+      speak(successMsg);
+    } catch (error) {
+      console.error('Error finding lawyers:', error);
+      const errorMsg = currentLanguage === 'ml'
+        ? "ക്ഷമിക്കണം, വിവരങ്ങൾ കണ്ടെത്തുന്നതിൽ ഒരു പിശക് സംഭവിച്ചു. ദയവായി പിന്നീട് ശ്രമിക്കുക."
+        : "Sorry, I encountered an error while finding legal help. Please try again later.";
+      addMessage('assistant', errorMsg);
+      speak(errorMsg);
+    } finally {
+      setIsProcessing(false);
+      setCurrentQuestionIndex(QUESTIONS.lawyer.length);
     }
+  };
 
-    setStatusText(t('voice.tryAgain'));
-    speak(t('voice.tryAgain'));
-  }
+  const performGetAIAdvice = async (data: any) => {
+    setIsProcessing(true);
+    const loadingMsg = currentLanguage === 'ml'
+      ? "ഞാൻ ആലോചിക്കുകയാണ്, ഒരു നിമിഷം..."
+      : "Let me think about that for a moment...";
+    addMessage('assistant', loadingMsg);
+    speak(loadingMsg);
 
-  // Speak initial prompt
+    try {
+      const response = await fetch('http://127.0.0.1:8000/legal-advice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          issue: data.issue,
+          language: currentLanguage
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch advice');
+
+      const result = await response.json();
+      if (result.error) throw new Error(result.error);
+
+      addMessage('assistant', result.advice, 'advice');
+      speak(result.advice);
+    } catch (error) {
+      console.error('Error getting AI advice:', error);
+      const errorMsg = currentLanguage === 'ml'
+        ? "ക്ഷമിക്കണം, ഉപദേശം ലഭ്യമാക്കുന്നതിൽ ഒരു പിശക് സംഭവിച്ചു."
+        : "Sorry, I encountered an error while getting AI advice.";
+      addMessage('assistant', errorMsg);
+      speak(errorMsg);
+    } finally {
+      setIsProcessing(false);
+      setCurrentQuestionIndex(QUESTIONS.ai.length);
+    }
+  };
+
   useEffect(() => {
+    setMessages([]);
+    setQueryData({});
+    setMode('select');
+    setCurrentQuestionIndex(-1);
+
     const timer = setTimeout(() => {
-      speak(t('services.legal.voicePrompt'));
-      setStatusText(t('services.legal.voicePrompt'));
-    }, 300);
+      const welcome = currentLanguage === 'ml'
+        ? "നമസ്കാരം! നിങ്ങൾക്ക് എങ്ങനെയാണ് നിയമ സഹായം വേണ്ടത്? ഒരു വക്കീലിനെ കണ്ടെത്തണോ അതോ ഇപ്പോൾ തന്നെ എന്നോട് ചോദിക്കണോ?"
+        : "Hello! How can I help you with legal matters? Would you like to find a lawyer or ask me for advice right now?";
+      addMessage('assistant', welcome);
+      speak(welcome);
+    }, 500); // Shorter delay for better responsiveness
+
     return () => clearTimeout(timer);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleOptionSelect = (option: LegalOption) => {
-    setSelectedOption(option);
-    const serviceName = t(`services.legal.${option}`);
-    speak(serviceName);
-    setStatusText(serviceName);
-  };
-
-  const handleSubmitComplaint = () => {
-    setComplaintSubmitted(true);
-    speak(currentLanguage === 'ml' ? 'പരാതി രജിസ്റ്റർ ചെയ്തു' : 'Complaint registered successfully');
-  };
-
-  const rights = rightsData[currentLanguage as 'en' | 'ml'] || rightsData.en;
+  }, [currentLanguage]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-violet-50 to-background dark:from-violet-950/20">
-      <Header 
-        title={t('services.legal.name')} 
-        showBack 
-        onBack={selectedOption ? () => setSelectedOption(null) : onBack}
+    <div className="h-screen flex flex-col bg-background">
+      <Header
+        title={t('services.legal.name')}
+        showBack
+        onBack={() => {
+          shouldListenAfterSpeakRef.current = false;
+          stopListening();
+          onBack();
+        }}
       />
 
-      <main className="flex-1 flex flex-col px-4 py-6 pb-32">
-        <div className="max-w-lg mx-auto w-full flex flex-col gap-6">
-          {/* Status */}
-          <div className="text-center">
-            <p className={cn(
-              'text-lg sm:text-xl',
-              isSpeaking && 'text-green-600 font-medium',
-              isListening && 'text-primary font-medium'
-            )}>
-              {statusText}
-            </p>
+      <main className="flex-1 overflow-y-auto p-4 space-y-4 pb-32">
+        {messages.length === 0 && (
+          <div className="flex flex-col justify-center items-center py-12 opacity-20">
+            <Scale className="w-16 h-16 mb-4" />
+            <p className="text-sm font-medium">VaaniCare Legal Assistant</p>
           </div>
+        )}
 
-          {/* Main Menu */}
-          {!selectedOption && (
-            <div className="space-y-4">
-              {legalServices.map((service) => {
-                const Icon = service.icon;
-                return (
-                  <Card 
-                    key={service.id}
-                    className="cursor-pointer transition-all hover:shadow-lg active:scale-[0.98]"
-                    onClick={() => handleOptionSelect(service.id)}
-                  >
-                    <CardContent className="p-6 flex items-center gap-4">
-                      <div className="w-16 h-16 rounded-full bg-violet-100 dark:bg-violet-900 flex items-center justify-center">
-                        <Icon className="w-8 h-8 text-violet-600" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-xl font-bold">{t(`services.legal.${service.id}`)}</p>
-                      </div>
-                      <ChevronRight className="w-6 h-6 text-muted-foreground" />
-                    </CardContent>
-                  </Card>
-                );
-              })}
-
-              {/* Legal Helpline */}
-              <Card className="bg-violet-100 dark:bg-violet-900/30">
-                <CardContent className="p-6 flex items-center justify-between">
-                  <div>
-                    <p className="text-lg font-medium">Legal Helpline</p>
-                    <p className="text-2xl font-bold text-violet-600">15100</p>
+        {messages.map((msg) => (
+          <div
+            key={msg.id}
+            className={cn(
+              "flex w-full mb-4",
+              msg.role === 'user' ? "justify-end" : "justify-start"
+            )}
+          >
+            <div className={cn(
+              "max-w-[85%] rounded-2xl p-4 shadow-sm transition-all animate-in fade-in slide-in-from-bottom-2",
+              msg.role === 'user'
+                ? "bg-violet-600 text-white rounded-tr-none"
+                : "bg-muted text-foreground rounded-tl-none border"
+            )}>
+              {msg.type === 'results' && msg.data ? (
+                <div className="space-y-4">
+                  <p className="font-semibold text-lg border-b pb-2 mb-2 border-violet-200 dark:border-violet-800">{msg.content}</p>
+                  <div className="grid gap-4">
+                    {msg.data.results.map((lawyer: any, idx: number) => (
+                      <Card key={idx} className="overflow-hidden border-violet-100 hover:border-violet-300 transition-colors shadow-none bg-card/50">
+                        <CardContent className="p-4">
+                          <h3 className="font-bold text-lg text-violet-700 dark:text-violet-400 flex items-start gap-2">
+                            <span className="mt-1 shrink-0"><Scale className="w-4 h-4" /></span>
+                            {lawyer.title}
+                          </h3>
+                          <p className="text-sm text-muted-foreground mt-2 line-clamp-3">
+                            {lawyer.snippet}
+                          </p>
+                          <a
+                            href={lawyer.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-violet-600 hover:underline"
+                          >
+                            {currentLanguage === 'ml' ? 'വിവരങ്ങൾ കാണുക' : 'View Details'} <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
-                  <Button 
-                    variant="legal" 
-                    onClick={() => window.location.href = 'tel:15100'}
-                  >
-                    <Phone className="w-5 h-5 mr-2" />
-                    {t('common.call')}
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {/* Consultation View */}
-          {selectedOption === 'consultation' && (
-            <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <MessageSquare className="w-6 h-6 text-violet-600" />
-                    {t('services.legal.consultation')}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <p className="text-lg text-muted-foreground">
-                    {currentLanguage === 'ml' 
-                      ? 'സൗജന്യ നിയമ ഉപദേശത്തിന് ലീഗൽ എയ്ഡ് സെന്ററുമായി ബന്ധപ്പെടുക'
-                      : 'Contact Legal Aid Center for free legal consultation'}
-                  </p>
-                  <Button variant="legal" className="w-full h-14 text-lg" onClick={() => window.location.href = 'tel:15100'}>
-                    <Phone className="w-5 h-5 mr-2" />
-                    {currentLanguage === 'ml' ? 'ഇപ്പോൾ വിളിക്കുക' : 'Call Now'}
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {/* Rights View */}
-          {selectedOption === 'rights' && (
-            <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <BookOpen className="w-6 h-6 text-violet-600" />
-                    {t('services.legal.rights')}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {rights.map((right, index) => (
-                    <div key={index} className="p-4 bg-secondary rounded-xl">
-                      <p className="font-semibold text-lg">{right.title}</p>
-                      <p className="text-muted-foreground">{right.description}</p>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {/* Complaint View */}
-          {selectedOption === 'complaint' && (
-            <div className="space-y-4">
-              {!complaintSubmitted ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <FileText className="w-6 h-6 text-violet-600" />
-                      {t('services.legal.complaint')}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <p className="text-lg text-muted-foreground">
-                      {currentLanguage === 'ml'
-                        ? 'പരാതി രജിസ്റ്റർ ചെയ്യാൻ ചുവടെയുള്ള ബട്ടൺ അമർത്തുക'
-                        : 'Press the button below to register your complaint'}
+                  <div className="mt-4 p-4 rounded-xl bg-violet-50 dark:bg-violet-900/20 border border-violet-100 dark:border-violet-800">
+                    <p className="text-sm font-medium text-violet-800 dark:text-violet-200 mb-2">
+                      {currentLanguage === 'ml' ? 'സൗജന്യ നിയമ സഹായത്തിന്:' : 'For free legal aid:'}
                     </p>
-                    <Button variant="legal" className="w-full h-14 text-lg" onClick={handleSubmitComplaint}>
-                      <Scale className="w-5 h-5 mr-2" />
-                      {currentLanguage === 'ml' ? 'പരാതി രജിസ്റ്റർ ചെയ്യുക' : 'Register Complaint'}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-violet-600 border-violet-200"
+                      onClick={() => window.location.href = 'tel:15100'}
+                    >
+                      <Phone className="w-4 h-4 mr-2" />
+                      {currentLanguage === 'ml' ? 'ഹെൽപ്പ്ലൈൻ: 15100' : 'Helpline: 15100'}
                     </Button>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="text-center py-8 space-y-4">
-                  <div className="w-20 h-20 mx-auto bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
-                    <CheckCircle2 className="w-12 h-12 text-green-600" />
                   </div>
-                  <h3 className="text-xl font-bold text-green-600">
-                    {currentLanguage === 'ml' ? 'പരാതി രജിസ്റ്റർ ചെയ്തു!' : 'Complaint Registered!'}
-                  </h3>
-                  <p className="text-muted-foreground">
-                    {currentLanguage === 'ml' ? 'ഞങ്ങൾ ഉടൻ ബന്ധപ്പെടും' : 'We will contact you soon'}
-                  </p>
+                </div>
+              ) : msg.type === 'advice' ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-violet-700 dark:text-violet-400 font-bold border-b pb-2 mb-2 border-violet-100 dark:border-violet-800">
+                    <Bot className="w-5 h-5" />
+                    <span>AI Legal Assistant</span>
+                  </div>
+                  <p className="text-lg leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                </div>
+              ) : (
+                <div className="flex items-start gap-3">
+                  {msg.role === 'assistant' && (
+                    <div className="mt-1 w-6 h-6 rounded-full bg-violet-100 dark:bg-violet-900 flex items-center justify-center shrink-0">
+                      <Scale className="w-3 h-3 text-violet-600" />
+                    </div>
+                  )}
+                  <p className="text-lg leading-relaxed">{msg.content}</p>
                 </div>
               )}
             </div>
-          )}
-
-          {/* Voice Status Indicator */}
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
-            <div className={cn(
-              'w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300',
-              isListening && 'bg-red-500 animate-pulse',
-              isSpeaking && 'bg-green-500',
-              !isListening && !isSpeaking && 'bg-primary/20'
-            )}>
-              {isSpeaking ? (
-                <Volume2 className="w-8 h-8 text-white animate-pulse" />
-              ) : (
-                <Mic className={cn('w-8 h-8', isListening ? 'text-white' : 'text-primary')} />
+          </div>
+        ))}
+        {(mode === 'select' || currentQuestionIndex === -1) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8 animate-in fade-in slide-in-from-bottom-8 duration-500 fill-mode-both">
+            <Card
+              className={cn(
+                "cursor-pointer transition-all active:scale-95 border-2",
+                mode === 'lawyer' ? "border-violet-600 bg-violet-50/50 shadow-lg scale-105" : "border-violet-100 hover:border-violet-400 hover:shadow-md"
               )}
-            </div>
-            <VoiceIndicator isActive={isListening || isSpeaking} />
+              onClick={() => mode === 'select' && handleSelection('lawyer')}
+            >
+              <CardContent className="p-6 flex items-center gap-4">
+                <div className={cn("w-12 h-12 rounded-full flex items-center justify-center shrink-0", mode === 'lawyer' ? "bg-violet-600 text-white" : "bg-violet-100 text-violet-600")}>
+                  <UserRound className="w-6 h-6" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-bold text-lg">{currentLanguage === 'ml' ? "വക്കീലിനെ കണ്ടെത്തുക" : "Find a Lawyer"}</p>
+                  <p className="text-sm text-muted-foreground">{currentLanguage === 'ml' ? "സമീപത്തുള്ള അഭിഭാഷകർ" : "Local legal advisors"}</p>
+                </div>
+                <ArrowRight className={cn("w-5 h-5", mode === 'lawyer' ? "text-violet-600" : "text-violet-400")} />
+              </CardContent>
+            </Card>
+            <Card
+              className={cn(
+                "cursor-pointer transition-all active:scale-95 border-2",
+                mode === 'ai' ? "border-violet-600 bg-violet-50/50 shadow-lg scale-105" : "border-violet-100 hover:border-violet-400 hover:shadow-md"
+              )}
+              onClick={() => mode === 'select' && handleSelection('ai')}
+            >
+              <CardContent className="p-6 flex items-center gap-4">
+                <div className={cn("w-12 h-12 rounded-full flex items-center justify-center shrink-0", mode === 'ai' ? "bg-violet-600 text-white" : "bg-violet-100 text-violet-600")}>
+                  <Bot className="w-6 h-6" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-bold text-lg">{currentLanguage === 'ml' ? "AI ഉപദേശം" : "AI Advice"}</p>
+                  <p className="text-sm text-muted-foreground">{currentLanguage === 'ml' ? "പെട്ടെന്നുള്ള സഹായം" : "Instant guidance"}</p>
+                </div>
+                <ArrowRight className={cn("w-5 h-5", mode === 'ai' ? "text-violet-600" : "text-violet-400")} />
+              </CardContent>
+            </Card>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </main>
+
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/80 backdrop-blur-md border-t">
+        <div className="max-w-2xl mx-auto flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="icon"
+            className={cn(
+              "h-14 w-14 rounded-full transition-all duration-300",
+              isListening ? "bg-red-500 hover:bg-red-600 text-white animate-pulse" :
+                isSpeaking ? "bg-green-500 hover:bg-green-600 text-white" :
+                  "bg-violet-100 text-violet-600 hover:bg-violet-200"
+            )}
+            onClick={isListening ? stopListening : () => startListening()}
+            disabled={isProcessing && !isListening}
+          >
+            {isSpeaking ? (
+              <Volume2 className="h-6 w-6 animate-pulse" />
+            ) : (
+              <Mic className={cn("h-6 w-6", isListening && "animate-bounce")} />
+            )}
+          </Button>
+
+          <div className="flex-1 relative">
+            <Input
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleMessageSubmit(inputText)}
+              placeholder={isListening ? (currentLanguage === 'ml' ? "ശ്രദ്ധിക്കുന്നു..." : "Listening...") : (currentLanguage === 'ml' ? "മറുപടി നൽകുക..." : "Type your reply...")}
+              className="h-14 rounded-2xl pr-12 text-lg shadow-inner bg-muted/50 border-none focus-visible:ring-violet-400/20"
+              disabled={isProcessing}
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 text-violet-600 hover:bg-violet-100 rounded-xl"
+              onClick={() => handleMessageSubmit(inputText)}
+              disabled={isProcessing || !inputText.trim()}
+            >
+              <Send className="h-5 w-5" />
+            </Button>
           </div>
         </div>
-      </main>
+        <div className="mt-2 text-center">
+          <VoiceIndicator isActive={isListening || isSpeaking} />
+        </div>
+      </div>
     </div>
   );
 }

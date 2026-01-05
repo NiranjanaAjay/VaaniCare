@@ -46,3 +46,20 @@ def duckduckgo_scheme_search(user, max_results_per_query=10):
                     }
 
     return list(aggregated.values())
+
+def duckduckgo_legal_search(issue, location, max_results=5):
+    """
+    Search for lawyers and legal advisors based on issue and location
+    """
+    query = f"lawyers or legal advisors for {issue} in {location} official contact"
+    results = []
+    
+    with DDGS() as ddgs:
+        for r in ddgs.text(query, max_results=max_results):
+            results.append({
+                "title": r.get("title", ""),
+                "url": r.get("href", ""),
+                "snippet": r.get("body", "")
+            })
+            
+    return results
